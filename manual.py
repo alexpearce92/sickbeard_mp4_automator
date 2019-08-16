@@ -2,12 +2,12 @@
 
 import sys
 import os
-import guessit
 import locale
 import glob
 import argparse
 import struct
 import logging
+from guessit import guessit
 from extensions import valid_tagging_extensions
 from readSettings import ReadSettings
 from tvdb_mp4 import Tvdb_mp4
@@ -43,7 +43,6 @@ logging.getLogger("qtfaststart").setLevel(logging.WARNING)
 log.info("Manual processor started.")
 
 settings = ReadSettings(os.path.dirname(sys.argv[0]), "autoProcess.ini", logger=log)
-
 
 def mediatype():
     print("Select media type:")
@@ -127,12 +126,11 @@ def getinfo(fileName=None, silent=False, tag=True, tvdbid=None):
 
 
 def guessInfo(fileName, tvdbid=None):
-    if tvdbid:
-        guess = guessit.guess_episode_info(fileName)
-        return tvdbInfo(guess, tvdbid)
     if not settings.fullpathguess:
         fileName = os.path.basename(fileName)
-    guess = guessit.guess_file_info(fileName)
+    guess = guessit(fileName)
+    yearGuess = str(guess['year']) if 'year' in guess else ''
+    print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
     try:
         if guess['type'] == 'movie':
             return tmdbInfo(guess)
@@ -141,35 +139,41 @@ def guessInfo(fileName, tvdbid=None):
         else:
             return None
     except Exception as e:
-        print(e)
+        print("Guessing title failed: %s" % (str(e.args[0])))
         return None
 
 
 def tmdbInfo(guessData):
+    origname = ''.join(e for e in guessData["title"] if e.isalnum())
+    # origname = origname.replace('&', 'and')
+    origReleaseYear = guessData["year"] if "year" in guessData else 0
+
     tmdb.configure(tmdb_api_key)
     movies = tmdb.Movies(guessData["title"].encode('ascii', errors='ignore'), limit=4)
     for movie in movies.iter_results():
         # Identify the first movie in the collection that matches exactly the movie title
         foundname = ''.join(e for e in movie["title"] if e.isalnum())
-        origname = ''.join(e for e in guessData["title"] if e.isalnum())
-        # origname = origname.replace('&', 'and')
-        if foundname.lower() == origname.lower():
-            print("Matched movie title as: %s %s" % (movie["title"].encode(sys.stdout.encoding, errors='ignore'), movie["release_date"].encode(sys.stdout.encoding, errors='ignore')))
+        foundReleaseYear = ''.join(e for e in movie["release_date"][:4] if e.isalnum())
+        if foundname.lower() == origname.lower() and (origReleaseYear == 0 or str(foundReleaseYear) == str(origReleaseYear)):
+            print("Matched movie as %s released %s" % (movie["title"].encode(sys.stdout.encoding or 'utf-8', errors='ignore'), movie["release_date"].encode(sys.stdout.encoding or 'utf-8', errors='ignore')))
             movie = tmdb.Movie(movie["id"])
             if isinstance(movie, dict):
                 tmdbid = movie["id"]
             else:
                 tmdbid = movie.get_id()
             return 2, tmdbid
+        else:
+            print("Skipped potential match: %s released %s" % (movie["title"].encode(sys.stdout.encoding or 'utf-8', errors='ignore'), movie["release_date"].encode(sys.stdout.encoding or 'utf-8', errors='ignore')))
+    print("Did not find movie with the search '%s' released '%s'" % (origname.lower(), str(origReleaseYear)))
     return None
 
 
 def tvdbInfo(guessData, tvdbid=None):
-    series = guessData["series"]
+    series = guessData["title"]
     if 'year' in guessData:
         fullseries = series + " (" + str(guessData["year"]) + ")"
     season = guessData["season"]
-    episode = guessData["episodeNumber"]
+    episode = guessData["episode"]
     t = tvdb_api.Tvdb(interactive=False, cache=False, banners=False, actors=False, forceConnect=True, language='en')
     try:
         tvdbid = str(tvdbid) if tvdbid else t[fullseries]['id']
@@ -177,7 +181,7 @@ def tvdbInfo(guessData, tvdbid=None):
     except:
         tvdbid = t[series]['id']
     try:
-        print("Matched TV episode as %s (TVDB ID:%d) S%02dE%02d" % (series.encode(sys.stdout.encoding, errors='ignore'), int(tvdbid), int(season), int(episode)))
+        print("Matched TV episode as %s (TVDB ID:%d) S%02dE%02d" % (series.encode(sys.stdout.encoding or 'utf-8', errors='ignore'), int(tvdbid), int(season), int(episode)))
     except:
         print("Matched TV episode")
     return 3, tvdbid, season, episode
@@ -193,14 +197,14 @@ def processFile(inputfile, tagdata, relativePath=None):
         imdbid = tagdata[1]
         tagmp4 = tmdb_mp4(imdbid, language=settings.taglanguage, logger=log)
         try:
-            print("Processing %s" % (tagmp4.title.encode(sys.stdout.encoding, errors='ignore')))
+            print("Processing %s" % (tagmp4.title.encode(sys.stdout.encoding or 'utf-8', errors='ignore')))
         except:
             print("Processing movie")
     elif tagdata[0] is 2:
         tmdbid = tagdata[1]
         tagmp4 = tmdb_mp4(tmdbid, True, language=settings.taglanguage, logger=log)
         try:
-            print("Processing %s" % (tagmp4.title.encode(sys.stdout.encoding, errors='ignore')))
+            print("Processing %s" % (tagmp4.title.encode(sys.stdout.encoding or 'utf-8', errors='ignore')))
         except:
             print("Processing movie")
     elif tagdata[0] is 3:
@@ -209,7 +213,7 @@ def processFile(inputfile, tagdata, relativePath=None):
         episode = int(tagdata[3])
         tagmp4 = Tvdb_mp4(tvdbid, season, episode, language=settings.taglanguage, logger=log)
         try:
-            print("Processing %s Season %02d Episode %02d - %s" % (tagmp4.show.encode(sys.stdout.encoding, errors='ignore'), int(tagmp4.season), int(tagmp4.episode), tagmp4.title.encode(sys.stdout.encoding, errors='ignore')))
+            print("Processing %s Season %02d Episode %02d - %s" % (tagmp4.show.encode(sys.stdout.encoding or 'utf-8', errors='ignore'), int(tagmp4.season), int(tagmp4.episode), tagmp4.title.encode(sys.stdout.encoding, errors='ignore')))
         except:
             print("Processing TV episode")
 
@@ -248,7 +252,7 @@ def walkDir(dir, silent=False, preserveRelative=False, tvdbid=None, tag=True):
             try:
                 if MkvtoMp4(settings, logger=log).validSource(filepath):
                     try:
-                        print("Processing file %s" % (filepath.encode(sys.stdout.encoding, errors='ignore')))
+                        print("Processing file %s" % (filepath.encode(sys.stdout.encoding or 'utf-8', errors='ignore')))
                     except:
                         try:
                             print("Processing file %s" % (filepath.encode('utf-8', errors='ignore')))

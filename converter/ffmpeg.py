@@ -532,6 +532,7 @@ class FFMpeg(object):
             raise FFMpegError('Error while calling ffmpeg binary')
 
         cmd = ' '.join(cmds)
+        print("\nRunning FFMPEG cmd: %s\n" % (cmd))
         if '\n' in total_output:
             line = total_output.split('\n')[-2]
 

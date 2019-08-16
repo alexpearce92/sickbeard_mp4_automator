@@ -305,7 +305,7 @@ class MkvtoMp4:
         # Get path information from the input file
         input_dir, filename, input_extension = self.parseFile(inputfile)
 
-        info = Converter(self.FFMPEG_PATH, self.FFPROBE_PATH).probe(inputfile)
+        info = Converter(self.FFMPEG_PATH, self.FFPROBE_PATH).probe(inputfile, False)
 
         # Video stream
         self.log.info("Reading video stream.")
@@ -772,8 +772,10 @@ class MkvtoMp4:
         conv = Converter(self.FFMPEG_PATH, self.FFPROBE_PATH).convert(inputfile, outputfile, options, timeout=None, preopts=options['preopts'], postopts=options['postopts'])
 
         try:
+            prevTimecode = 0
             for timecode in conv:
-                if reportProgress:
+                if reportProgress and prevTimecode != timecode:
+                    prevTimecode = timecode
                     try:
                         sys.stdout.write('\r')
                         sys.stdout.write('[{0}] {1}%'.format('#' * (timecode / 10) + ' ' * (10 - (timecode / 10)), timecode))
