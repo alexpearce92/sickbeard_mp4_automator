@@ -2,12 +2,12 @@
 
 import sys
 import os
+import guessit
 import locale
 import glob
 import argparse
 import struct
 import logging
-from guessit import guessit
 from extensions import valid_tagging_extensions
 from readSettings import ReadSettings
 from tvdb_mp4 import Tvdb_mp4
@@ -128,7 +128,7 @@ def getinfo(fileName=None, silent=False, tag=True, tvdbid=None):
 def guessInfo(fileName, tvdbid=None):
     if not settings.fullpathguess:
         fileName = os.path.basename(fileName)
-    guess = guessit(fileName)
+    guess = guessit.guess_file_info(fileName)
     yearGuess = str(guess['year']) if 'year' in guess else ''
     print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
     try:
@@ -169,11 +169,11 @@ def tmdbInfo(guessData):
 
 
 def tvdbInfo(guessData, tvdbid=None):
-    series = guessData["title"]
+    series = guessData["series"]
     if 'year' in guessData:
         fullseries = series + " (" + str(guessData["year"]) + ")"
     season = guessData["season"]
-    episode = guessData["episode"]
+    episode = guessData["episodeNumber"]
     t = tvdb_api.Tvdb(interactive=False, cache=False, banners=False, actors=False, forceConnect=True, language='en')
     try:
         tvdbid = str(tvdbid) if tvdbid else t[fullseries]['id']

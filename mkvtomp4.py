@@ -305,7 +305,9 @@ class MkvtoMp4:
         # Get path information from the input file
         input_dir, filename, input_extension = self.parseFile(inputfile)
 
-        info = Converter(self.FFMPEG_PATH, self.FFPROBE_PATH).probe(inputfile, False)
+        info = Converter(self.FFMPEG_PATH, self.FFPROBE_PATH).probe(inputfile)
+        if info is None:
+            raise Exception("Video file info could not be read. Probably an error with FFPROBE")
 
         # Video stream
         self.log.info("Reading video stream.")

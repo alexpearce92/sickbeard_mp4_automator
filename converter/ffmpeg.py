@@ -408,10 +408,9 @@ class FFMpeg(object):
             return None
 
         info = MediaInfo(posters_as_video)
-
-        p = self._spawn([self.ffprobe_path,
-                         '-show_format', '-show_streams', fname])
+        p = self._spawn([self.ffprobe_path, '-show_format', '-show_streams', fname])
         stdout_data, _ = p.communicate()
+        print(_)
         stdout_data = stdout_data.decode(console_encoding, errors='ignore')
         info.parse_ffprobe(stdout_data)
 
@@ -449,7 +448,7 @@ class FFMpeg(object):
         if not os.path.exists(infile):
             raise FFMpegError("Input file doesn't exist: " + infile)
 
-        cmds = [self.ffmpeg_path]
+        cmds = ['ffmpeg'] #self.ffmpeg_path
         if preopts:
             cmds.extend(preopts)
         cmds.extend(['-i', infile])
@@ -465,6 +464,7 @@ class FFMpeg(object):
         if postopts:
             cmds.extend(postopts)
         cmds.extend(['-y', outfile])
+        # cmds.insert(0, 'sudo')
 
         if timeout:
             def on_sigalrm(*_):

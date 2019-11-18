@@ -15,7 +15,10 @@ from extensions import valid_output_extensions, valid_poster_extensions
 
 def urlretrieve(url, fn):
     with open(fn, 'wb') as f:
-        f.write(requests.get(url, allow_redirects=True, timeout=30).content)
+        print("tvdb response: %s" % (url))
+        response = requests.get(url, allow_redirects=True, timeout=30)
+        print(response)
+        f.write(response.content)
     return (fn, f)
 
 
@@ -40,15 +43,18 @@ class Tvdb_mp4:
 
                 # Gather information from theTVDB
                 self.showdata = self.tvdb_show[self.show]
+                if self.showdata['seriesname'] is None:
+                    raise Exception("TV show " + str(show) + " not found. Is the TVDB down?")
+
                 self.seasondata = self.showdata[self.season]
                 self.episodedata = self.seasondata[self.episode]
 
                 self.show = self.showdata['seriesname']
                 self.genre = self.showdata['genre']
                 self.network = self.showdata['network']
-                self.contentrating = self.showdata['contentrating']
+                self.contentrating = self.showdata['rating']
 
-                self.title = self.episodedata['episodename']
+                self.title = self.episodedata['episodeName']
                 self.description = self.episodedata['overview']
                 self.airdate = self.episodedata['firstaired']
                 self.director = self.episodedata['director']
@@ -91,8 +97,7 @@ class Tvdb_mp4:
         if self.HD is not None:
             video["hdvd"] = self.HD
         if self.genre is not None:
-            video["\xa9gen"] = self.genre[1:-1].split('|')[0]
-            # video["\xa9gen"] = self.genre.replace('|', ',')[1:-1]  # Genre(s)
+            video["\xa9gen"] = self.genre[1:-1][0]
         video["----:com.apple.iTunes:iTunMOVI"] = self.xml  # XML - see xmlTags method
         video["----:com.apple.iTunes:iTunEXTC"] = self.setRating()  # iTunes content rating
 
@@ -215,16 +220,20 @@ class Tvdb_mp4:
             else:
                 posters = posterCollection()
                 try:
-                    for bannerid in self.showdata['_banners']['season']['season'].keys():
-                        if str(self.showdata['_banners']['season']['season'][bannerid]['season']) == str(self.season):
+                    for banner in self.showdata['_banners']['season']['raw']:
+                        # TODO: restire season ID filter once tvdb fixes it
+                        # if banner['season'] == str(self.season)
+                        if str(banner['keyType']) == 'season':
                             poster = Poster()
-                            poster.ratingcount = int(self.showdata['_banners']['season']['season'][bannerid]['ratingcount'])
+                            poster.ratingcount = int(banner['ratingsInfo']['count'])
                             if poster.ratingcount > 0:
-                                poster.rating = float(self.showdata['_banners']['season']['season'][bannerid]['rating'])
-                            poster.bannerpath = self.showdata['_banners']['season']['season'][bannerid]['_bannerpath']
+                                poster.rating = float(banner['ratingsInfo']['average'])
+                            poster.bannerpath = banner['fileName'] # TODO: need to provide url to retrieve image
                             posters.addPoster(poster)
 
                     poster = urlretrieve(posters.topPoster().bannerpath, os.path.join(tempfile.gettempdir(), "poster-%s%s%s.jpg" % (self.showid, self.season, self.episode)))[0]
+                    
+                    print(poster)
                 except Exception as e:
                     self.log.error("Exception while retrieving poster %s.", str(e))
                     poster = None
