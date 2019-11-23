@@ -857,7 +857,7 @@ class Tvdb:
         errors = r.get('errors')
         r_data = r.get('data')
         links = r.get('links')
-        print("tvdb response: %s %s" % ('ERROR' if error is not None else 'OK', url))
+        print("tvdb response: %s %s" % (response.status_code, url))
         if error is not None:
             print(r)
 
@@ -997,7 +997,7 @@ class Tvdb:
         """
         log().debug('Getting season banners for %s' % (sid))
         bannersEt = self._getetsrc(self.config['url_seriesBanner'] % sid)
-        if bannersEt['seasonwide'] is not None: # resolve bug with TVDB returning wrong image type keys
+        if 'seasonwide' in bannersEt and 'season' not in bannersEt: # resolve bug with TVDB returning wrong image type keys
             bannersEt[u'season'] = bannersEt['seasonwide']
 
         banners = {}

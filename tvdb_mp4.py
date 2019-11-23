@@ -15,9 +15,8 @@ from extensions import valid_output_extensions, valid_poster_extensions
 
 def urlretrieve(url, fn):
     with open(fn, 'wb') as f:
-        print("tvdb response: %s" % (url))
         response = requests.get(url, allow_redirects=True, timeout=30)
-        print(response)
+        print("tvdb response: %s %s" % (response.status_code, url))
         f.write(response.content)
     return (fn, f)
 
@@ -199,6 +198,7 @@ class Tvdb_mp4:
         return output.getvalue()
 
     def getArtwork(self, mp4Path, filename='cover', thumbnail=False):
+        print('Retrieving artwork')
         # Check for local cover.jpg or cover.png artwork in the same directory as the mp4
         extensions = valid_poster_extensions
         poster = None
@@ -221,19 +221,17 @@ class Tvdb_mp4:
                 posters = posterCollection()
                 try:
                     for banner in self.showdata['_banners']['season']['raw']:
-                        # TODO: restire season ID filter once tvdb fixes it
-                        # if banner['season'] == str(self.season)
-                        if str(banner['keyType']) == 'season':
+                        if str(banner['subKey']) == str(self.season):
+                            bannerId = banner['id']
+                            resolution = banner['resolution']
                             poster = Poster()
                             poster.ratingcount = int(banner['ratingsInfo']['count'])
                             if poster.ratingcount > 0:
                                 poster.rating = float(banner['ratingsInfo']['average'])
-                            poster.bannerpath = banner['fileName'] # TODO: need to provide url to retrieve image
+                            poster.bannerpath = self.showdata['_banners']['season'][resolution][bannerId]['_bannerpath']
                             posters.addPoster(poster)
 
                     poster = urlretrieve(posters.topPoster().bannerpath, os.path.join(tempfile.gettempdir(), "poster-%s%s%s.jpg" % (self.showid, self.season, self.episode)))[0]
-                    
-                    print(poster)
                 except Exception as e:
                     self.log.error("Exception while retrieving poster %s.", str(e))
                     poster = None

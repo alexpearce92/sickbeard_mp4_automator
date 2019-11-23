@@ -410,7 +410,7 @@ class FFMpeg(object):
         info = MediaInfo(posters_as_video)
         p = self._spawn([self.ffprobe_path, '-show_format', '-show_streams', fname])
         stdout_data, _ = p.communicate()
-        print(_)
+        #print(_) # uncomment to view ffprobe stdout
         stdout_data = stdout_data.decode(console_encoding, errors='ignore')
         info.parse_ffprobe(stdout_data)
 
