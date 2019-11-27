@@ -138,7 +138,6 @@ def guessInfo(fileName, tvdbid=None, imdbid=None):
         guess = guessit.guess_file_info(fileName)
     yearGuess = str(guess['year']) if 'year' in guess else ''
     print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
-    pprint(guess)
     try:
         if guess['type'] == 'movie' and tvdbid is None:
             return tmdbInfo(guess)
