@@ -89,11 +89,11 @@ def getYesNo():
         return getYesNo()
 
 
-def getinfo(fileName=None, silent=False, tag=True, tvdbid=None):
+def getinfo(fileName=None, silent=False, tag=True, tvdbid=None, imdbid=None):
     tagdata = None
     # Try to guess the file is guessing is enabled
     if fileName is not None:
-        tagdata = guessInfo(fileName, tvdbid)
+        tagdata = guessInfo(fileName, tvdbid, imdbid)
 
     if silent is False:
         if tagdata:
@@ -125,15 +125,26 @@ def getinfo(fileName=None, silent=False, tag=True, tvdbid=None):
             return None
 
 
-def guessInfo(fileName, tvdbid=None):
+def guessInfo(fileName, tvdbid=None, imdbid=None):
     if not settings.fullpathguess:
         fileName = os.path.basename(fileName)
-    guess = guessit.guess_file_info(fileName)
+    if tvdbid is not None and imdbid is not None:
+        guess = guessit.guess_file_info(fileName)
+    elif tvdbid is not None:
+        guess = guessit.guess_episode_info(fileName)
+    elif imdbid is not None:
+        guess = guessit.guess_movie_info(fileName)
+    else:
+        guess = guessit.guess_file_info(fileName)
     yearGuess = str(guess['year']) if 'year' in guess else ''
     print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
+    pprint(guess)
     try:
-        if guess['type'] == 'movie':
+        if guess['type'] == 'movie' and tvdbid is None:
             return tmdbInfo(guess)
+        elif guess['type'] == 'movie' and tvdbid is not None:
+            print("Guess returned movie type even though tvdb ID was given")
+            raise Exception
         elif guess['type'] == 'episode':
             return tvdbInfo(guess, tvdbid)
         else:
@@ -244,7 +255,7 @@ def processFile(inputfile, tagdata, relativePath=None):
                 post_processor.run_scripts()
 
 
-def walkDir(dir, silent=False, preserveRelative=False, tvdbid=None, tag=True):
+def walkDir(dir, silent=False, preserveRelative=False, tvdbid=None, tag=True, imdbid=None):
     for r, d, f in os.walk(dir):
         for file in f:
             filepath = os.path.join(r, file)
@@ -259,7 +270,7 @@ def walkDir(dir, silent=False, preserveRelative=False, tvdbid=None, tag=True):
                         except:
                             print("Processing file")
                     if tag:
-                        tagdata = getinfo(filepath, silent, tvdbid=tvdbid)
+                        tagdata = getinfo(filepath, silent, tvdbid=tvdbid, imdbid=imdbid)
                     else:
                         tagdata = None
                     processFile(filepath, tagdata, relativePath=relative)
@@ -341,8 +352,9 @@ def main():
         path = getValue("Enter path to file")
 
     tvdbid = int(args['tvdbid']) if args['tvdbid'] else None
+    imdbid = int(args['tvdbid']) if args['tvdbid'] else None
     if os.path.isdir(path):
-        walkDir(path, silent, tvdbid=tvdbid, preserveRelative=args['preserveRelative'], tag=settings.tagfile)
+        walkDir(path, silent, tvdbid=tvdbid, preserveRelative=args['preserveRelative'], tag=settings.tagfile, imdbid=imdbid)
     elif (os.path.isfile(path) and MkvtoMp4(settings, logger=log).validSource(path)):
         if (not settings.tagfile):
             tagdata = None
@@ -352,7 +364,7 @@ def main():
             if (tvdbid and season and episode):
                 tagdata = [3, tvdbid, season, episode]
             else:
-                tagdata = getinfo(path, silent=silent, tvdbid=tvdbid)
+                tagdata = getinfo(path, silent=silent, tvdbid=tvdbid, imdbid=imdbid)
         elif ((args['imdbid'] or args['tmdbid']) and not args['tvdbid']):
             if (args['imdbid']):
                 imdbid = args['imdbid']
@@ -361,7 +373,7 @@ def main():
                 tmdbid = int(args['tmdbid'])
                 tagdata = [2, tmdbid]
         else:
-            tagdata = getinfo(path, silent=silent, tvdbid=tvdbid)
+            tagdata = getinfo(path, silent=silent, tvdbid=tvdbid, imdbid=imdbid)
         processFile(path, tagdata)
     else:
         try:
