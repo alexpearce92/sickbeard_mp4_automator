@@ -128,6 +128,7 @@ def getinfo(fileName=None, silent=False, tag=True, tvdbid=None, imdbid=None):
 def guessInfo(fileName, tvdbid=None, imdbid=None):
     if not settings.fullpathguess:
         fileName = os.path.basename(fileName)
+
     if tvdbid is not None and imdbid is not None:
         guess = guessit.guess_file_info(fileName)
     elif tvdbid is not None:
@@ -136,14 +137,14 @@ def guessInfo(fileName, tvdbid=None, imdbid=None):
         guess = guessit.guess_movie_info(fileName)
     else:
         guess = guessit.guess_file_info(fileName)
+
     yearGuess = str(guess['year']) if 'year' in guess else ''
     print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
     try:
         if guess['type'] == 'movie' and tvdbid is None:
             return tmdbInfo(guess)
         elif guess['type'] == 'movie' and tvdbid is not None:
-            print("Guess returned movie type even though tvdb ID was given")
-            raise Exception
+            raise Exception("Guess returned movie type even though tvdb ID was given")
         elif guess['type'] == 'episode':
             return tvdbInfo(guess, tvdbid)
         else:
@@ -351,7 +352,7 @@ def main():
         path = getValue("Enter path to file")
 
     tvdbid = int(args['tvdbid']) if args['tvdbid'] else None
-    imdbid = int(args['tvdbid']) if args['tvdbid'] else None
+    imdbid = int(args['imdbid']) if args['imdbid'] else None
     if os.path.isdir(path):
         walkDir(path, silent, tvdbid=tvdbid, preserveRelative=args['preserveRelative'], tag=settings.tagfile, imdbid=imdbid)
     elif (os.path.isfile(path) and MkvtoMp4(settings, logger=log).validSource(path)):
