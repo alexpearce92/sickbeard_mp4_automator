@@ -2,7 +2,6 @@
 
 import sys
 import os
-import guessit
 import locale
 import glob
 import argparse
@@ -18,6 +17,7 @@ from tvdb_api import tvdb_api
 from tmdb_api import tmdb
 from extensions import tmdb_api_key
 from logging.config import fileConfig
+from guessit import guessit
 
 if sys.version[0] == "3":
     raw_input = input
@@ -129,15 +129,7 @@ def guessInfo(fileName, tvdbid=None, imdbid=None):
     if not settings.fullpathguess:
         fileName = os.path.basename(fileName)
 
-    if tvdbid is not None and imdbid is not None:
-        guess = guessit.guess_file_info(fileName)
-    elif tvdbid is not None:
-        guess = guessit.guess_episode_info(fileName)
-    elif imdbid is not None:
-        guess = guessit.guess_movie_info(fileName)
-    else:
-        guess = guessit.guess_file_info(fileName)
-
+    guess = guessit(fileName)
     yearGuess = str(guess['year']) if 'year' in guess else ''
     print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
     try:
@@ -180,11 +172,11 @@ def tmdbInfo(guessData):
 
 
 def tvdbInfo(guessData, tvdbid=None):
-    series = guessData["series"]
+    series = guessData["title"]
     if 'year' in guessData:
         fullseries = series + " (" + str(guessData["year"]) + ")"
     season = guessData["season"]
-    episode = guessData["episodeNumber"]
+    episode = guessData["episode"]
     t = tvdb_api.Tvdb(interactive=False, cache=False, banners=False, actors=False, forceConnect=True, language='en')
     try:
         tvdbid = str(tvdbid) if tvdbid else t[fullseries]['id']
