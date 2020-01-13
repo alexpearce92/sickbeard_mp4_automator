@@ -213,7 +213,8 @@ def processFile(inputfile, tagdata, relativePath=None):
     elif tagdata[0] is 3:
         tvdbid = int(tagdata[1])
         season = int(tagdata[2])
-        episode = int(tagdata[3])
+        # some episodes are combined and return `[1, 2]`` instead of just `1`
+        episode = int(tagdata[3][0]) if type(tagdata[3]) == list else int(tagdata[3])
         tagmp4 = Tvdb_mp4(tvdbid, season, episode, language=settings.taglanguage, logger=log)
         try:
             print("Processing %s Season %02d Episode %02d - %s" % (tagmp4.show.encode(sys.stdout.encoding or 'utf-8', errors='ignore'), int(tagmp4.season), int(tagmp4.episode), tagmp4.title.encode(sys.stdout.encoding, errors='ignore')))
