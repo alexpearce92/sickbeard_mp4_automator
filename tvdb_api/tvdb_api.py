@@ -860,6 +860,7 @@ class Tvdb:
         print("tvdb response: %s %s" % (response.status_code, url))
         if error is not None:
             print(r)
+            print("token: %s" % (self.headers['Authorization']))
 
         if error:
             if error == u'Resource not found':
@@ -940,7 +941,7 @@ class Tvdb:
         """This searches TheTVDB.com for the series name
         and returns the result list
         """
-        series = url_quote(series.encode("utf-8"))
+        series = url_quote(series.replace('-', ' ').encode("utf-8")) #replace hyphen with space to address search bug
         log().debug("Searching for show %s" % series)
         seriesEt = self._getetsrc(self.config['url_getSeries'] % (series))
         if not seriesEt:
