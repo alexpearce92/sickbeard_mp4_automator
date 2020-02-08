@@ -728,6 +728,8 @@ class H264Codec(VideoCodec):
             optlist.extend(['-crf', str(safe['quality'])])
         if 'profile' in safe:
             optlist.extend(['-profile:v', safe['profile']])
+            if safe['profile'] == 'high':
+                optlist.extend(['-pix_fmt', 'yuv420p'])
         if 'level' in safe:
             optlist.extend(['-level', '%0.1f' % safe['level']])
         if 'tune' in safe:
