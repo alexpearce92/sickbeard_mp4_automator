@@ -774,15 +774,14 @@ class MkvtoMp4:
         conv = Converter(self.FFMPEG_PATH, self.FFPROBE_PATH).convert(inputfile, outputfile, options, timeout=None, preopts=options['preopts'], postopts=options['postopts'])
 
         try:
-            prevTimecode = 0
+            prevTimecode = None
             for timecode in conv:
                 if reportProgress and prevTimecode != timecode:
                     prevTimecode = timecode
                     try:
-                        sys.stdout.write('\r')
-                        sys.stdout.write('[{0}] {1}%'.format('#' * (timecode / 10) + ' ' * (10 - (timecode / 10)), timecode))
+                        self.log.info('[{0}] {1}%'.format('#' * (timecode / 10) + ' ' * (10 - (timecode / 10)), timecode))
                     except:
-                        sys.stdout.write(str(timecode))
+                        self.log.info(str(timecode))
                     sys.stdout.flush()
 
             self.log.info("%s created." % outputfile)
