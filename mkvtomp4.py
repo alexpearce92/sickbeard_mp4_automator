@@ -750,7 +750,7 @@ class MkvtoMp4:
         self.log.debug("Output file: %s." % outputfile)
 
         if len(options['audio']) == 0:
-            self.error.info("Conversion has no audio tracks, aborting")
+            self.log.error("Conversion has no audio tracks, aborting")
             return inputfile, ""
 
         if self.output_extension == input_extension and len([x for x in [options['video']] + [x for x in options['audio'].values()] + [x for x in options['subtitle'].values()] if x['codec'] != 'copy']) == 0:
