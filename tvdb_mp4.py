@@ -63,6 +63,11 @@ class Tvdb_mp4:
                 self.xml = self.xmlTags()
                 break
             except Exception as e:
+                if(e.message.lower().startswith("could not find season")):
+                    # seasons that are not found are OK errors
+                    self.log.exception("Failed to locate season. Continuing.")
+                    break
+
                 self.log.exception("Failed to connect to TVDB, trying again in 20 seconds.")
                 time.sleep(20)
 

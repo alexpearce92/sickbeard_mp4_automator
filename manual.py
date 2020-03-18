@@ -7,6 +7,7 @@ import glob
 import argparse
 import struct
 import logging
+import re
 from extensions import valid_tagging_extensions
 from readSettings import ReadSettings
 from tvdb_mp4 import Tvdb_mp4
@@ -18,6 +19,7 @@ from tmdb_api import tmdb
 from extensions import tmdb_api_key
 from logging.config import fileConfig
 from guessit import guessit
+from mutagen.mp4 import MP4
 
 if sys.version[0] == "3":
     raw_input = input
@@ -227,12 +229,31 @@ def processFile(inputfile, tagdata, relativePath=None):
         output = converter.process(inputfile, True)
         if output:
             if tagmp4 is not None and output['output_extension'] in valid_tagging_extensions:
+                taggingFailed = False
                 try:
                     tagmp4.setHD(output['x'], output['y'])
                     tagmp4.writeTags(output['output'], settings.artwork, settings.thumbnail)
                 except Exception as e:
-                    print("There was an error tagging the file")
+                    taggingFailed = True
+                    print("There was an error tagging the file:")
                     print(e)
+                
+                if taggingFailed:
+                    print("Manually tagging file based on file name")
+                    
+                    # tag media based on file name
+                    try:
+                        isTvShow = tagdata[0] is 3
+                        if isTvShow:
+                            writeTagsTvManual(output, inputfile)
+                        else:
+                            writeTagsMovieManual(output, inputfile)
+                    except Exception as e:
+                        print("There was a problem writing the manual tags:")
+                        print(e)
+                    
+            print("Passed tagging", tagmp4 is not None, output['output_extension'])
+            
             if settings.relocate_moov and output['output_extension'] in valid_tagging_extensions:
                 converter.QTFS(output['output'])
             output_files = converter.replicate(output['output'], relativePath=relativePath)
@@ -247,6 +268,66 @@ def processFile(inputfile, tagdata, relativePath=None):
                         post_processor.setTV(tagdata[1], tagdata[2], tagdata[3])
                 post_processor.run_scripts()
 
+def writeTagsTvManual(output, path):
+    fileName = os.path.splitext(os.path.basename(path))[0]
+
+    nameParts = fileName.split(' - ')
+    show = nameParts[0]
+    season = int(re.search('S[0-9]+E', nameParts[1]).group(0)[1:-1])
+    episode = int(re.search('E[0-9]+', nameParts[1]).group(0)[1:])
+    title = ' - '.join(nameParts[2:])
+
+    if show is None or season is None or episode is None or title is None:
+        raise IOError("File name not in expected format: 'show title - S##E## - episode title'")
+
+    video = MP4(path)
+
+    video["tvsh"] = show  # TV show title
+    video["\xa9nam"] = title  # Video title
+    video["tven"] = title  # Episode title
+    video["tvsn"] = [season]  # Season number
+    video["disk"] = [(int(season), 0)]  # Season number as disk
+    video["\xa9alb"] = show + ", Season " + str(season) # iTunes Album as Season
+    video["tves"] = [episode]  # Episode number
+    video["stik"] = [10]  # TV show iTunes category
+
+    MP4(path).delete(path)
+    for i in range(3):
+        try:
+            print("Trying to write manual tags.")
+            video.save()
+            print("Manual tags written successfully.")
+            break
+        except IOError as e:
+            print("There was a problem writing the manual tags. Retrying.")
+            time.sleep(5)
+
+def writeTagsMovieManual(output, path):
+    fileName = os.path.splitext(os.path.basename(path))[0]
+
+    nameParts = fileName.split(' (')
+    year = str.replace(nameParts[-1], ')', '')
+    title = ' ('.join(nameParts[:-1])
+
+    if year is None or title is None:
+        raise IOError("File name not in expected format: 'movie name (year)'")
+
+    video = MP4(path)
+
+    video["\xa9nam"] = title  # Video title
+    video["\xa9day"] = year
+
+    MP4(path).delete(path)
+    for i in range(3):
+        try:
+            print("Trying to write manual tags.")
+            video.save()
+            print("Manual tags written successfully.")
+            break
+        except IOError as e:
+            print("There was a problem writing the manual tags. Retrying.")
+            print(e)
+            time.sleep(5)
 
 def walkDir(dir, silent=False, preserveRelative=False, tvdbid=None, tag=True, imdbid=None):
     for r, d, f in os.walk(dir):
