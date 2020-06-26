@@ -517,6 +517,8 @@ class MkvtoMp4:
         subtitle_settings = {}
         l = 0
         self.log.info("Reading subtitle streams.")
+        if self.swl is not None:
+            self.log.info("Target subtitle language(s): %s" % (self.swl))
         for s in info.subtitle:
             try:
                 if s.metadata['language'].strip() == "" or s.metadata['language'] is None:
@@ -524,7 +526,7 @@ class MkvtoMp4:
             except KeyError:
                 s.metadata['language'] = 'und'
 
-            self.log.info("Subtitle detected for stream #%s: %s [%s]." % (s.index, s.codec, s.metadata['language']))
+            self.log.info("Subtitle detected for stream #%s: %s [%s] (%s)." % (s.index, s.codec, s.metadata['language'], 'Ignored' if s.codec.lower() in bad_subtitle_codecs else 'Accepted'))
 
             # Set undefined language to default language if specified
             if self.sdl is not None and s.metadata['language'] == 'und':
@@ -583,6 +585,7 @@ class MkvtoMp4:
                                     pass
 
                             self.log.info("%s created." % outputfile)
+                            self.downloadsubs = False
                         except:
                             self.log.exception("Unabled to create external subtitle file for stream %s." % (s.index))
                         
@@ -608,6 +611,7 @@ class MkvtoMp4:
 
         if self.downloadsubs:
             import subliminal
+            self.log.info("Could not find subtitles to rip in target subtitle language(s).")
             self.log.info("Attempting to download subtitles.")
 
             # Attempt to set the dogpile cache

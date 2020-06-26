@@ -67,6 +67,10 @@ class Tvdb_mp4:
                     # seasons that are not found are OK errors
                     self.log.exception("Failed to locate season. Continuing.")
                     break
+                if(e.message.lower().startswith("could not find episode")):
+                    # episodes that are not found are OK errors
+                    self.log.exception("Failed to locate episode. Continuing.")
+                    break
 
                 self.log.exception("Failed to connect to TVDB, trying again in 20 seconds.")
                 time.sleep(20)

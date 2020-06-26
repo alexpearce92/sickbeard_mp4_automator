@@ -132,14 +132,16 @@ def guessInfo(fileName, tvdbid=None, imdbid=None):
         fileName = os.path.basename(fileName)
 
     guess = guessit(fileName)
-    yearGuess = str(guess['year']) if 'year' in guess else ''
-    print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
+    if tvdbid is not None or imdbid is not None:
+        print("Looking up %s with ID %s" % ("series" if tvdbid is not None else "movie", tvdbid if tvdbid is not None else imdbid))
+    else:
+        yearGuess = str(guess['year']) if 'year' in guess else ''
+        print("Guessing title of '%s%s' for file '%s'" % (guess["title"], ' (' + yearGuess + ')' if yearGuess else '', fileName))
+
     try:
-        if guess['type'] == 'movie' and tvdbid is None:
+        if imdbid is not None or (guess is not None and guess['type'] == 'movie'):
             return tmdbInfo(guess)
-        elif guess['type'] == 'movie' and tvdbid is not None:
-            raise Exception("Guess returned movie type even though tvdb ID was given")
-        elif guess['type'] == 'episode':
+        elif tvdbid is not None or (guess is not None and guess['type'] == 'episode'):
             return tvdbInfo(guess, tvdbid)
         else:
             return None
@@ -172,23 +174,34 @@ def tmdbInfo(guessData):
     print("Did not find movie with the search '%s' released '%s'" % (origname.lower(), str(origReleaseYear)))
     return None
 
-
 def tvdbInfo(guessData, tvdbid=None):
-    series = guessData["title"]
-    if 'year' in guessData:
-        fullseries = series + " (" + str(guessData["year"]) + ")"
+    t = tvdb_api.Tvdb(interactive=False, cache=False, banners=False, actors=False, forceConnect=True, language='en')
+
+    if tvdbid is None and guessData is None:
+        raise Exception("No data given for tvdb lookup")
+
+    series = None
     season = guessData["season"]
     episode = guessData["episode"]
-    t = tvdb_api.Tvdb(interactive=False, cache=False, banners=False, actors=False, forceConnect=True, language='en')
-    try:
-        tvdbid = str(tvdbid) if tvdbid else t[fullseries]['id']
-        series = t[int(tvdbid)]['seriesname']
-    except:
-        tvdbid = t[series]['id']
+    if tvdbid is not None:
+        entry = t[int(tvdbid)]
+        series = entry['seriesname']
+
+    if tvdbid is None:
+        series = ' '.join(guessData["title"]) if type(guessData["title"]) is list else guessData["title"]
+        if 'year' in guessData:
+            fullseries = series + " (" + str(guessData["year"]) + ")"
+        try:
+            tvdbid = str(tvdbid) if tvdbid else t[fullseries]['id']
+            series = t[int(tvdbid)]['seriesname']
+        except:
+            tvdbid = t[series]['id']
+
     try:
         print("Matched TV episode as %s (TVDB ID:%d) S%02dE%02d" % (series.encode(sys.stdout.encoding or 'utf-8', errors='ignore'), int(tvdbid), int(season), int(episode)))
     except:
         print("Matched TV episode")
+
     return 3, tvdbid, season, episode
 
 
@@ -252,8 +265,6 @@ def processFile(inputfile, tagdata, relativePath=None):
                         print("There was a problem writing the manual tags:")
                         print(e)
                     
-            print("Passed tagging", tagmp4 is not None, output['output_extension'])
-            
             if settings.relocate_moov and output['output_extension'] in valid_tagging_extensions:
                 converter.QTFS(output['output'])
             output_files = converter.replicate(output['output'], relativePath=relativePath)
