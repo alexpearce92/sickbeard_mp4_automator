@@ -47,13 +47,15 @@ class AuthURLOpener(FancyURLopener):
         return FancyURLopener.open(self, url)
 
 
-def processEpisode(dirName, settings, nzbName=None, logger=None):
+def processEpisode(dirName, settings, nzbName=None, logger=None, pathMapping={}):
+    log = logger or logging.getLogger(__name__)
 
-    # Setup logging
-    if logger:
-        log = logger
-    else:
-        log = logging.getLogger(__name__)
+    # Path Mapping
+    for k in pathMapping:
+        if dirName.startswith(k):
+            dirName = dirName.replace(k, pathMapping[k], 1)
+            log.info("PathMapping match found, replacing %s with %s, final API directory is %s." % (k, pathMapping[k], dirName))
+            break
 
     host = settings.Sickbeard['host']
     port = settings.Sickbeard['port']
@@ -65,9 +67,9 @@ def processEpisode(dirName, settings, nzbName=None, logger=None):
         ssl = 0
 
     try:
-        web_root = settings.Sickbeard['web_root']
+        webroot = settings.Sickbeard['webroot']
     except:
-        web_root = ""
+        webroot = ""
 
     params = {}
 
@@ -84,14 +86,14 @@ def processEpisode(dirName, settings, nzbName=None, logger=None):
     else:
         protocol = "http://"
 
-    url = protocol + host + ":" + port + web_root + "/home/postprocess/processEpisode?" + urlencode(params)
+    url = protocol + host + ":" + str(port) + webroot + "/home/postprocess/processEpisode?" + urlencode(params)
 
     log.debug('Host: %s.' % host)
     log.debug('Port: %s.' % port)
     log.debug('Username: %s.' % username)
     log.debug('Password: %s.' % password)
     log.debug('Protocol: %s.' % protocol)
-    log.debug('Web Root: %s.' % web_root)
+    log.debug('Web Root: %s.' % webroot)
     log.debug('URL: %s.' % url)
 
     log.info("Opening URL: %s." % url)

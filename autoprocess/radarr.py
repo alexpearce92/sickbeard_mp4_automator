@@ -3,7 +3,7 @@ import os
 import logging
 
 
-def processMovie(dirName, settings, nzbGet=False, logger=None):
+def processMovie(dirName, settings, nzbGet=False, importMode=None, logger=None, pathMapping={}):
 
     if nzbGet:
         errorprefix = "[ERROR] "
@@ -12,13 +12,16 @@ def processMovie(dirName, settings, nzbGet=False, logger=None):
         errorprefix = ""
         infoprefix = ""
 
-    # Setup logging
-    if logger:
-        log = logger
-    else:
-        log = logging.getLogger(__name__)
+    log = logger or logging.getLogger(__name__)
 
     log.info("%sRadarr notifier started." % infoprefix)
+
+    # Path Mapping
+    for k in pathMapping:
+        if dirName.startswith(k):
+            dirName = dirName.replace(k, pathMapping[k], 1)
+            log.info("PathMapping match found, replacing %s with %s, final API directory is %s." % (k, pathMapping[k], dirName))
+            break
 
     # Import Requests
     try:
@@ -45,9 +48,11 @@ def processMovie(dirName, settings, nzbGet=False, logger=None):
     else:
         protocol = "http://"
 
-    webroot = settings.Radarr['web_root']
-    url = protocol + host + ":" +  port + webroot + "/api/command"
+    webroot = settings.Radarr['webroot']
+    url = protocol + host + ":" + str(port) + webroot + "/api/command"
     payload = {'name': 'DownloadedMoviesScan', 'path': dirName}
+    if importMode:
+        payload["importMode"] = importMode
     headers = {'X-Api-Key': apikey}
 
     log.debug("Radarr host: %s." % host)
@@ -62,6 +67,7 @@ def processMovie(dirName, settings, nzbGet=False, logger=None):
     try:
         r = requests.post(url, json=payload, headers=headers)
         rstate = r.json()
+        log.debug(rstate)
         log.info("%sRadarr response: %s." % (infoprefix, rstate['state']))
         return True
     except:

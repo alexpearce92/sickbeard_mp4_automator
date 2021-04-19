@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os.path
 import os
@@ -7,8 +7,9 @@ import signal
 from subprocess import Popen, PIPE
 import logging
 import locale
+import json
+from converter.avcodecs import BaseCodec, video_codec_list
 
-logger = logging.getLogger(__name__)
 
 console_encoding = locale.getdefaultlocale()[1] or 'UTF-8'
 
@@ -64,6 +65,7 @@ class MediaFormatInfo(object):
         self.bitrate = None
         self.duration = None
         self.filesize = None
+        self.metadata = {}
 
     def parse_ffprobe(self, key, val):
         """
@@ -79,6 +81,11 @@ class MediaFormatInfo(object):
             self.duration = MediaStreamInfo.parse_float(val, None)
         elif key == 'size':
             self.size = MediaStreamInfo.parse_float(val, None)
+
+        if key.startswith('TAG:'):
+            key = key.split('TAG:')[1].lower()
+            value = val.lower().strip()
+            self.metadata[key] = value
 
     def __repr__(self):
         if self.duration is None:
@@ -100,10 +107,10 @@ class MediaStreamInfo(object):
       * metadata - optional metadata associated with a video or audio stream
       * bitrate - stream bitrate in bytes/second
       * attached_pic - (0, 1 or None) is stream a poster image? (e.g. in mp3)
+      * fps - average frames per second
     Video-specific attributes are:
       * video_width - width of video in pixels
       * video_height - height of video in pixels
-      * video_fps - average frames per second
     Audio-specific attributes are:
       * audio_channels - the number of channels in the stream
       * audio_samplerate - sample rate (Hz)
@@ -118,16 +125,63 @@ class MediaStreamInfo(object):
         self.bitrate = None
         self.video_width = None
         self.video_height = None
-        self.video_fps = None
+        self.fps = None
         self.video_level = None
         self.pix_fmt = None
         self.profile = None
         self.audio_channels = None
         self.audio_samplerate = None
         self.attached_pic = None
-        self.sub_forced = None
-        self.sub_default = None
+        self.field_order = None
         self.metadata = {}
+        self.disposition = {}
+        self.color = {}
+        self.framedata = {}
+
+    @property
+    def json(self):
+        language = self.metadata.get("language", "und")
+        out = {
+            'index': self.index,
+            'codec': self.codec
+        }
+
+        if self.bitrate:
+            out['bitrate'] = self.bitrate
+
+        if self.type == 'audio':
+            out['channels'] = self.audio_channels
+            out['samplerate'] = self.audio_samplerate
+            out['language'] = language
+            out['disposition'] = self.dispostr
+        elif self.type == 'video':
+            out['pix_fmt'] = self.pix_fmt
+            out['profile'] = self.profile
+            out['fps'] = self.fps
+            out['framedata'] = self.framedata
+            if self.video_width and self.video_height:
+                out['dimensions'] = "%dx%d" % (self.video_width, self.video_height)
+            if self.video_level:
+                out['level'] = self.video_level
+            out['field_order'] = self.field_order
+        elif self.type == 'subtitle':
+            out['disposition'] = self.dispostr
+            out['language'] = language
+        elif self.type == 'attachment':
+            out['filename'] = self.metadata.get('filename')
+            out['mimetype'] = self.metadata.get('mimetype')
+        return out
+
+    @property
+    def dispostr(self):
+        disposition = ''
+        for k in self.disposition:
+            if k in BaseCodec.DISPOSITIONS:
+                if self.disposition[k]:
+                    disposition += "+" + k
+                else:
+                    disposition += "-" + k
+        return disposition
 
     @staticmethod
     def parse_float(val, default=0.0):
@@ -143,6 +197,13 @@ class MediaStreamInfo(object):
         except:
             return default
 
+    @staticmethod
+    def parse_bool(val, default=False):
+        try:
+            return bool(val)
+        except:
+            return default
+
     def parse_ffprobe(self, key, val):
         """
         Parse raw ffprobe output (key=value).
@@ -153,7 +214,7 @@ class MediaStreamInfo(object):
         elif key == 'codec_type':
             self.type = val
         elif key == 'codec_name':
-            self.codec = val
+            self.codec = val.lower()
         elif key == 'codec_long_name':
             self.codec_desc = val
         elif key == 'duration':
@@ -167,16 +228,25 @@ class MediaStreamInfo(object):
         elif key == 'channels':
             self.audio_channels = self.parse_int(val)
         elif key == 'sample_rate':
-            self.audio_samplerate = self.parse_float(val)
+            self.audio_samplerate = self.parse_int(val)
         elif key == 'DISPOSITION:attached_pic':
             self.attached_pic = self.parse_int(val)
         elif key == 'profile':
-            self.profile = val
+            self.profile = val.lower()
+        elif key == 'DISPOSITION:forced':
+            self.forced = self.parse_bool(self.parse_int(val))
+        elif key == 'DISPOSITION:default':
+            self.default = self.parse_bool(self.parse_int(val))
 
         if key.startswith('TAG:'):
             key = key.split('TAG:')[1].lower()
             value = val.lower().strip()
             self.metadata[key] = value
+
+        if key.startswith('DISPOSITION:'):
+            key = key.split('DISPOSITION:')[1].lower()
+            value = val.lower().strip()
+            self.disposition[key] = self.parse_bool(self.parse_int(value))
 
         if self.type == 'audio':
             if key == 'avg_frame_rate':
@@ -185,9 +255,9 @@ class MediaStreamInfo(object):
                     n = self.parse_float(n)
                     d = self.parse_float(d)
                     if n > 0.0 and d > 0.0:
-                        self.video_fps = float(n) / float(d)
+                        self.fps = float(n) / float(d)
                 elif '.' in val:
-                    self.video_fps = self.parse_float(val)
+                    self.fps = self.parse_float(val)
 
         if self.type == 'video':
             if key == 'r_frame_rate':
@@ -196,19 +266,28 @@ class MediaStreamInfo(object):
                     n = self.parse_float(n)
                     d = self.parse_float(d)
                     if n > 0.0 and d > 0.0:
-                        self.video_fps = float(n) / float(d)
+                        self.fps = float(n) / float(d)
                 elif '.' in val:
-                    self.video_fps = self.parse_float(val)
-            if key == 'level':
+                    self.fps = self.parse_float(val)
+            elif key == 'level':
                 self.video_level = self.parse_float(val)
-            if key == 'pix_fmt':
-                self.pix_fmt = val
-
-        if self.type == 'subtitle':
-            if key == 'DISPOSITION:forced':
-                self.sub_forced = self.parse_int(val)
-            if key == 'DISPOSITION:default':
-                self.sub_default = self.parse_int(val)
+                try:
+                    codec_class = next(x for x in video_codec_list if x.ffprobe_codec_name == self.codec)
+                    self.video_level = codec_class.codec_specific_level_conversion(self.video_level)
+                except:
+                    pass
+            elif key == 'pix_fmt':
+                self.pix_fmt = val.lower()
+            elif key == "field_order":
+                self.field_order = val.lower()
+            elif key == "color_range":
+                self.color['range'] = val.lower()
+            elif key == "color_space":
+                self.color['space'] = val.lower()
+            elif key == "color_transfer":
+                self.color['transfer'] = val.lower()
+            elif key == "color_primaries":
+                self.color['primaries'] = val.lower()
 
     def __repr__(self):
         d = ''
@@ -221,7 +300,7 @@ class MediaStreamInfo(object):
         elif self.type == 'video':
             d = 'type=%s, codec=%s, width=%d, height=%d, fps=%.1f' % (
                 self.type, self.codec, self.video_width, self.video_height,
-                self.video_fps)
+                self.fps)
         elif self.type == 'subtitle':
             d = 'type=%s, codec=%s' % (self.type, self.codec)
         if self.bitrate is not None:
@@ -241,6 +320,7 @@ class MediaInfo(object):
     The attributes are:
       * format - a MediaFormatInfo object
       * streams - a list of MediaStreamInfo objects
+      * path - path to file
     """
 
     def __init__(self, posters_as_video=True):
@@ -251,6 +331,17 @@ class MediaInfo(object):
         self.format = MediaFormatInfo()
         self.posters_as_video = posters_as_video
         self.streams = []
+        self.framedata = []
+        self.path = None
+
+    @property
+    def json(self):
+        return {'format': self.format.format,
+                'format-fullname': self.format.fullname,
+                'video': self.video.json,
+                'audio': [x.json for x in self.audio],
+                'subtitle': [x.json for x in self.subtitle],
+                'attachment': [x.json for x in self.attachment]}
 
     def parse_ffprobe(self, raw):
         """
@@ -322,6 +413,17 @@ class MediaInfo(object):
                 result.append(s)
         return result
 
+    @property
+    def attachment(self):
+        """
+        All attachment streams
+        """
+        result = []
+        for s in self.streams:
+            if s.type == 'attachment':
+                result.append(s)
+        return result
+
 
 class FFMpeg(object):
     """
@@ -331,6 +433,15 @@ class FFMpeg(object):
     >>> f = FFMpeg()
     """
     DEFAULT_JPEG_QUALITY = 4
+    CODECS_LINE_RE = re.compile(
+        r'^ [A-Z.]{6} ([^ \=]+) +(.+)$', re.M)
+    CODECS_DECODERS_RE = re.compile(
+        r' \(decoders: ([^)]+) \)')
+    CODECS_ENCODERS_RE = re.compile(
+        r' \(encoders: ([^)]+) \)')
+    DECODER_SYNONYMS = {
+        'mpeg1video': 'mpeg1',
+        'mpeg2video': 'mpeg2'}
 
     def __init__(self, ffmpeg_path=None, ffprobe_path=None):
         """
@@ -340,7 +451,7 @@ class FFMpeg(object):
 
         def which(name):
             path = os.environ.get('PATH', os.defpath)
-            for d in path.split(':'):
+            for d in path.split(os.pathsep):
                 fpath = os.path.join(d, name)
                 if os.path.exists(fpath) and os.access(fpath, os.X_OK):
                     return fpath
@@ -366,6 +477,37 @@ class FFMpeg(object):
         if not os.path.exists(self.ffprobe_path):
             raise FFMpegError("ffprobe binary not found: " + self.ffprobe_path)
 
+    @property
+    def codecs(self):
+        codecs = self._get_stdout([self.ffprobe_path, '-hide_banner', '-codecs'])
+        codecs = {
+            line_match.group(1): line_match.group(2)
+            for line_match in self.CODECS_LINE_RE.finditer(codecs)}
+
+        for codec, coders in codecs.items():
+            decoders_match = self.CODECS_DECODERS_RE.search(coders)
+            encoders_match = self.CODECS_ENCODERS_RE.search(coders)
+            codecs[codec] = dict(decoders=decoders_match and decoders_match.group(1).split() or [], encoders=encoders_match and encoders_match.group(1).split() or [])
+        return codecs
+
+    @property
+    def hwaccels(self):
+        return [hwaccel.strip() for hwaccel in self._get_stdout([self.ffmpeg_path, '-hide_banner', '-hwaccels']).split('\n')[1:] if hwaccel.strip()]
+
+    @property
+    def encoders(self):
+        encoders = self._get_stdout([self.ffmpeg_path, '-hide_banner', '-encoders'])
+        return [line_match.group(1) for line_match in self.CODECS_LINE_RE.finditer(encoders)]
+
+    @property
+    def decoders(self):
+        decoders = self._get_stdout([self.ffmpeg_path, '-hide_banner', '-decoders'])
+        return [line_match.group(1) for line_match in self.CODECS_LINE_RE.finditer(decoders)]
+
+    def hwaccel_decoder(self, video_codec, hwaccel):
+        source_codec = self.DECODER_SYNONYMS.get(video_codec, video_codec)
+        return '{0}_{1}'.format(source_codec, hwaccel)
+
     @staticmethod
     def _spawn(cmds):
         clean_cmds = []
@@ -374,10 +516,30 @@ class FFMpeg(object):
                 clean_cmds.append(str(cmd))
             cmds = clean_cmds
         except:
-            logger.exception("There was an error making all command line parameters a string")
-        logger.debug('Spawning ffmpeg with command: ' + ' '.join(cmds))
+            raise FFMpegError("There was an error making all command line parameters a string")
         return Popen(cmds, shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE,
                      close_fds=(os.name != 'nt'), startupinfo=None)
+
+    def _get_stdout(self, cmds):
+        """
+        Return the decoded stdout output for the command.
+        """
+        p = self._spawn(cmds)
+        stdout_data, stderr = p.communicate()
+        return stdout_data.decode(console_encoding, errors='ignore')
+
+    def framedata(self, fname):
+        try:
+            stdout_data = self._get_stdout([
+                self.ffprobe_path, '-hide_banner', '-loglevel', 'warning',
+                '-select_streams', 'v:0', '-print_format', 'json',
+                '-show_frames', '-read_intervals', '%+#1',
+                '-show_entries', 'frame=color_space,color_primaries,color_transfer,side_data_list,pix_fmt',
+                '-probesize', '50M', '-analyzeduration', '100M',
+                '-i', fname])
+            return json.loads(stdout_data)['frames'][0]
+        except:
+            raise FFMpegError("Unable to obtain FFMPEG framedata")
 
     def probe(self, fname, posters_as_video=True):
         """
@@ -408,19 +570,37 @@ class FFMpeg(object):
             return None
 
         info = MediaInfo(posters_as_video)
+        info.path = fname
 
-        p = self._spawn([self.ffprobe_path,
-                         '-show_format', '-show_streams', fname])
-        stdout_data, _ = p.communicate()
-        stdout_data = stdout_data.decode(console_encoding, errors='ignore')
+        stdout_data = self._get_stdout([
+            self.ffprobe_path, '-show_format', '-show_streams', fname])
         info.parse_ffprobe(stdout_data)
 
         if not info.format.format and len(info.streams) == 0:
             return None
 
+        try:
+            info.video.framedata = self.framedata(fname)
+        except:
+            pass
+
         return info
 
-    def convert(self, infile, outfile, opts, timeout=10, preopts=None, postopts=None):
+    def generateCommands(self, outfile, opts, preopts=None, postopts=None):
+        cmds = [self.ffmpeg_path]
+        if preopts:
+            cmds.extend(preopts)
+
+        cmds.extend(opts)
+        if postopts:
+            cmds.extend(postopts)
+        if outfile:
+            cmds.extend(['-y', outfile])
+        else:
+            cmds.extend(['-f', 'null', '-'])
+        return cmds
+
+    def convert(self, outfile, opts, timeout=10, preopts=None, postopts=None):
         """
         Convert the source media (infile) according to specified options
         (a list of ffmpeg switches as strings) and save it to outfile.
@@ -437,34 +617,23 @@ class FFMpeg(object):
 
         >>> conv = FFMpeg().convert('test.ogg', '/tmp/output.mp3',
         ...    ['-acodec libmp3lame', '-vn'])
-        >>> for timecode in conv:
+        >>> for timecode, debug in conv:
         ...    pass # can be used to inform the user about conversion progress
 
         """
         if os.name == 'nt':
             timeout = 0
-            if len(outfile) > 260:
+            if outfile and len(outfile) > 260:
                 outfile = '\\\\?\\' + outfile
+
+        infile = opts[opts.index("-i") + 1]
 
         if not os.path.exists(infile):
             raise FFMpegError("Input file doesn't exist: " + infile)
 
-        cmds = [self.ffmpeg_path]
-        if preopts:
-            cmds.extend(preopts)
-        cmds.extend(['-i', infile])
+        cmds = self.generateCommands(outfile, opts, preopts, postopts)
 
-        # Move additional inputs to the front of the line
-        for ind, command in enumerate(opts):
-            if command == '-i':
-                cmds.extend(['-i', opts[ind + 1]])
-                del opts[ind]
-                del opts[ind]
-
-        cmds.extend(opts)
-        if postopts:
-            cmds.extend(postopts)
-        cmds.extend(['-y', outfile])
+        yield 0, cmds
 
         if timeout:
             def on_sigalrm(*_):
@@ -495,7 +664,7 @@ class FFMpeg(object):
                 # For small or very fast jobs, ffmpeg may never output a '\r'.  When EOF is reached, yield if we haven't yet.
                 if not yielded:
                     yielded = True
-                    yield 10
+                    yield 10, ""
                 break
 
             try:
@@ -521,7 +690,9 @@ class FFMpeg(object):
                     else:
                         timecode = float(tmp[0])
                     yielded = True
-                    yield timecode
+                    debug = line.strip()
+                    debug = debug if debug.startswith("frame") else ""
+                    yield timecode, debug
 
         if timeout:
             signal.signal(signal.SIGALRM, signal.SIG_DFL)
