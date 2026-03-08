@@ -1,0 +1,326 @@
+diff --git a/config/autoProcess.ini b/config/autoProcess.ini
+new file mode 100644
+index 0000000..6cec233
+--- /dev/null
++++ b/config/autoProcess.ini
+@@ -0,0 +1,253 @@
++[Converter]
++ffmpeg = /usr/local/bin/ffmpeg
++ffprobe = /usr/local/bin/ffprobe
++threads = 0
++hwaccels = 
++hwaccel-decoders = 
++hwdevices = 
++hwaccel-output-format = 
++output-directory = 
++output-format = mp4
++output-extension = mp4
++temp-extension = 
++minimum-size = 0
++ignored-extensions = nfo, ds_store
++copy-to = 
++move-to = 
++delete-original = False
++sort-streams = True
++process-same-extensions = False
++bypass-if-copying-all = True
++force-convert = False
++post-process = False
++wait-post-process = False
++detailed-progress = False
++opts-separator = ,
++preopts = 
++postopts = 
++regex-directory-replace = [^\w\-_\. ]
++
++[Permissions]
++chmod = 0644
++uid = 501
++gid = -1
++
++[Metadata]
++relocate-moov = True
++full-path-guess = True
++tag = True
++tag-language = eng
++download-artwork = poster
++sanitize-disposition = 
++strip-metadata = False
++keep-titles = True
++
++[Video]
++codec = h264, x264, hevc, x265
++max-bitrate = 0
++bitrate-ratio = 
++crf = 18
++crf-profiles = 
++preset = 
++codec-parameters = 
++dynamic-parameters = False
++max-width = 0
++profile = high,main
++max-level = 4.2
++pix-fmt = yuv420p
++filter = 
++force-filter = False
++
++[HDR]
++codec = 
++pix-fmt = 
++space = bt2020nc
++transfer = smpte2084
++primaries = bt2020
++preset = 
++codec-parameters = 
++filter = 
++force-filter = False
++profile = 
++
++[Audio]
++codec = ac3
++languages = eng,jpn,zho,heb,deu
++default-language = eng
++first-stream-of-language = False
++allow-language-relax = True
++channel-bitrate = 128
++max-bitrate = 0
++max-channels = 0
++prefer-more-channels = True
++default-more-channels = True
++filter = 
++force-filter = False
++sample-rates = 
++copy-original = False
++aac-adtstoasc = False
++ignore-truehd = mp4,m4v
++ignored-dispositions = 
++unique-dispositions = False
++sample-format = 
++copy-original-before = False
++stream-codec-combinations = 
++
++[Universal Audio]
++codec = aac
++channel-bitrate = 128
++first-stream-only = True
++move-after = True
++filter = 
++force-filter = False
++
++[Audio.ChannelFilters]
++6-2 = pan=stereo|FL=0.5*FC+0.707*FL+0.707*BL+0.5*LFE|FR=0.5*FC+0.707*FR+0.707*BR+0.5*LFE
++
++[Subtitle]
++codec = srt
++codec-image-based = 
++languages = eng,heb
++default-language = eng
++first-stream-of-language = False
++encoding = 
++burn-subtitles = False
++burn-dispositions = 
++embed-subs = False
++embed-image-subs = False
++embed-only-internal-subs = False
++filename-dispositions = forced
++ignore-embedded-subs = False
++ignored-dispositions = 
++unique-dispositions = False
++attachment-codec = 
++
++[Subtitle.Subliminal]
++download-subs = False
++download-hearing-impaired-subs = False
++providers = 
++
++[Subtitle.Subliminal.Auth]
++opensubtitles = 
++tvsubtitles = 
++
++[Sonarr]
++host = localhost
++port = 8989
++apikey = 
++ssl = False
++webroot = 
++force-rename = False
++rescan = True
++block-reprocess = False
++
++[Radarr]
++host = localhost
++port = 7878
++apikey = 
++ssl = False
++webroot = 
++force-rename = False
++rescan = True
++block-reprocess = False
++
++[Sickbeard]
++host = localhost
++port = 8081
++ssl = False
++apikey = 
++webroot = 
++username = 
++password = 
++
++[Sickrage]
++host = localhost
++port = 8081
++ssl = False
++apikey = 
++webroot = 
++username = 
++password = 
++
++[CouchPotato]
++host = localhost
++port = 5050
++username = 
++password = 
++apikey = 
++delay = 65
++method = renamer
++delete-failed = False
++ssl = False
++webroot = 
++
++[SABNZBD]
++convert = True
++sickbeard-category = sickbeard
++sickrage-category = sickrage
++couchpotato-category = couchpotato
++sonarr-category = sonarr
++radarr-category = radarr
++bypass-category = bypass
++output-directory = 
++path-mapping = 
++
++[Deluge]
++couchpotato-label = couchpotato
++sickbeard-label = sickbeard
++sickrage-label = sickrage
++sonarr-label = sonarr
++radarr-label = radarr
++bypass-label = bypass
++convert = True
++host = localhost
++port = 58846
++username = 
++password = 
++output-directory = 
++remove = False
++path-mapping = 
++
++[qBittorrent]
++couchpotato-label = couchpotato
++sickbeard-label = sickbeard
++sickrage-label = sickrage
++sonarr-label = sonarr
++radarr-label = radarr
++bypass-label = bypass
++convert = True
++action-before = 
++action-after = 
++host = localhost
++port = 8080
++ssl = False
++username = 
++password = 
++output-directory = 
++path-mapping = 
++
++[uTorrent]
++couchpotato-label = couchpotato
++sickbeard-label = sickbeard
++sickrage-label = sickrage
++sonarr-label = sonarr
++radarr-label = radarr
++bypass-label = bypass
++convert = True
++webui = False
++action-before = 
++action-after = 
++host = localhost
++ssl = False
++port = 8080
++username = 
++password = 
++output-directory = 
++path-mapping = 
++
++[Plex]
++host = localhost
++port = 32400
++refresh = False
++token = 
++
+diff --git a/config/logging.ini b/config/logging.ini
+new file mode 100644
+index 0000000..70c2901
+--- /dev/null
++++ b/config/logging.ini
+@@ -0,0 +1,61 @@
++[loggers]
++keys = root, manual, nzbget
++
++[handlers]
++keys = consoleHandler, nzbgetHandler, fileHandler, manualHandler
++
++[formatters]
++keys = simpleFormatter, minimalFormatter, nzbgetFormatter
++
++[logger_root]
++level = INFO
++handlers = consoleHandler, fileHandler
++
++[logger_nzbget]
++level = DEBUG
++handlers = nzbgetHandler, fileHandler
++propagate = 0
++qualname = NZBGetPostProcess
++
++[logger_manual]
++level = DEBUG
++handlers = manualHandler, fileHandler
++propagate = 0
++qualname = MANUAL
++
++[handler_consoleHandler]
++class = StreamHandler
++level = INFO
++formatter = simpleFormatter
++args = (sys.stdout,)
++
++[handler_nzbgetHandler]
++class = StreamHandler
++level = INFO
++formatter = nzbgetFormatter
++args = (sys.stdout,)
++
++[handler_manualHandler]
++class = StreamHandler
++level = DEBUG
++formatter = minimalFormatter
++args = (sys.stdout,)
++
++[handler_fileHandler]
++class = handlers.RotatingFileHandler
++level = INFO
++formatter = simpleFormatter
++args = ('%(logfilename)s', 'a', 100000, 3, 'utf-8')
++
++[formatter_simpleFormatter]
++format = %(asctime)s - %(name)s - %(levelname)s - %(message)s
++datefmt = %Y-%m-%d %H:%M:%S
++
++[formatter_minimalFormatter]
++format = %(message)s
++datefmt = 
++
++[formatter_nzbgetFormatter]
++format = [%(levelname)s] %(message)s
++datefmt = 
++

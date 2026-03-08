@@ -1,0 +1,10 @@
+diff --git a/resources/extensions.py b/resources/extensions.py
+index e1222a4..02b3884 100644
+--- a/resources/extensions.py
++++ b/resources/extensions.py
+@@ -1,4 +1,4 @@
+-valid_poster_extensions = ['jpg', 'png']
++valid_poster_extensions = ['jpg', 'png', 'jpeg']
+ tmdb_api_key = "45e408d2851e968e6e4d0353ce621c66"
+ subtitle_codec_extensions = {'srt': 'srt',
+                              'webvtt': 'vtt',

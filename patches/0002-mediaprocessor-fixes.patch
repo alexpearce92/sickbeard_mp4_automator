@@ -1,0 +1,25 @@
+--- a/resources/mediaprocessor.py
++++ b/resources/mediaprocessor.py
+@@ -2138,7 +2138,7 @@
+         self.log.debug("File name: %s." % filename)
+         self.log.debug("Input extension: %s." % input_extension)
+         self.log.debug("Output directory: %s." % output_dir)
+-        self.log.debug("Output extension: %s." % output_dir)
++        self.log.debug("Output extension: %s." % output_extension)
+ 
+         counter = (".%d" % number) if number > 0 else ""
+ 
+@@ -2340,9 +2340,12 @@
+ 
+         try:
+             timecode = 0
++            prevTimeCode = 0
+             debug = ""
+             for timecode, debug in conv:
+-                if reportProgress:
++                self.log.debug(debug)
++                if reportProgress and prevTimeCode != timecode:
++                    prevTimeCode = timecode
+                     if progressOutput:
+                         progressOutput(timecode, debug)
+                     else:

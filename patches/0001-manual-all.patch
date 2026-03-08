@@ -1,0 +1,104 @@
+--- a/manual.py
++++ b/manual.py
+@@ -1,5 +1,7 @@
+ #!/usr/bin/env python3
+ 
++import platform
++import shutil
+ import sys
+ import os
+ import guessit
+@@ -173,17 +175,26 @@
+     if not settings.fullpathguess:
+         fileName = os.path.basename(fileName)
+     guess = guessit.guessit(original or fileName)
++    if tvdbid is not None or imdbid is not None:
++        log.info("Looking up %s with ID %s" % (
++            "series" if tvdbid is not None else "movie",
++            tvdbid if tvdbid is not None else imdbid
++        ))
++    else:
++        yearGuess = str(guess["year"]) if "year" in guess else ""
++        log.info("Guessing title of '%s%s' for file '%s'" % (
++            guess["title"], " (" + yearGuess + ")" if yearGuess else "", fileName))
+     try:
+-        if guess['type'] == 'movie':
++        if imdbid is not None or (guess is not None and guess['type'] == 'movie'):
+             return movieInfo(guess, tmdbid=tmdbid, imdbid=imdbid, language=language, original=original)
+-        elif guess['type'] == 'episode':
++        elif tvdbid is not None or (guess is not None and guess['type'] == 'episode'):
+             return tvInfo(guess, tmdbid=tmdbid, tvdbid=tvdbid, imdbid=imdbid, season=season, episode=episode, language=language, original=original)
+         else:
+             return None
+     except KeyboardInterrupt:
+         raise
+     except:
+-        log.exception("Unable to guess movie information")
++        log.exception("Unable to guess media information")
+         return None
+ 
+ 
+@@ -326,10 +337,45 @@
+             else:
+                 mp.post(output_files, mediatype, tmdbid=tmdbid, season=season, episode=episode)
+         addtoProcessedArchive(output_files + [output['input']] if not output['input_deleted'] else output_files, processedList, processedArchive)
++
++        if output['input'] != output['output'] and not output['input_deleted']:
++            moveToTrash(output['input'])
+     else:
+         log.error("There was an error processing file %s, no output data received" % inputfile)
+ 
+ 
++
++def moveToTrash(filepath):
++    """Move a file to the OS trash instead of permanently deleting it."""
++    log.info("Moving to trash: %s" % filepath)
++    system = platform.system()
++    home_dir = os.path.expanduser("~")
++    if system == "Darwin":
++        trash_dir = os.path.join(home_dir, ".Trash")  # macOS: capital T
++    elif system == "Linux":
++        trash_dir = os.path.join(home_dir, ".local", "share", "Trash", "files")
++    else:
++        trash_dir = os.path.join(home_dir, ".trash")  # Windows fallback
++    if not os.path.exists(trash_dir):
++        log.error("Trash directory not found at %s — skipping deletion of original." % trash_dir)
++        return
++    filename = os.path.basename(filepath)
++    dest = os.path.join(trash_dir, filename)
++    i = 2
++    while os.path.exists(dest):
++        base, ext = os.path.splitext(filename)
++        dest = os.path.join(trash_dir, "%s.%d%s" % (base, i, ext))
++        i += 1
++    try:
++        shutil.move(filepath, dest)
++        log.info("Moved original to trash: %s" % dest)
++    except FileNotFoundError:
++        log.error("File not found when trying to trash: %s" % filepath)
++    except PermissionError:
++        log.error("Permission denied moving %s to trash." % filepath)
++    except Exception as e:
++        log.error("Unexpected error moving %s to trash: %s" % (filepath, e))
++
+ def walkDir(dir, settings, silent=False, preserveRelative=False, tmdbid=None, imdbid=None, tvdbid=None, tag=True, tagOnly=False, optionsOnly=False, processedList=None, processedArchive=None):
+     files = []
+     error = []
+@@ -408,6 +454,7 @@
+     parser.add_argument('-o', '--original', help="Specify the original source/release filename")
+     parser.add_argument('-ms', '--minsize', help="Specify the minimum file size")
+     parser.add_argument('-pa', '--processedarchive', help="Specify a processed list/archive so already processed files are skipped", nargs='?', const="archive.json")
++    parser.add_argument('-ds', '--downloadsubs', action="store_true", help="Overrides and enables subtitle downloading regardless of autoProcess.ini setting")
+ 
+     args = vars(parser.parse_args())
+ 
+@@ -478,6 +525,9 @@
+     if (args['optionsonly']):
+         logging.getLogger("resources.mediaprocessor").setLevel(logging.CRITICAL)
+         log.info("Options only mode enabled")
++    if args.get('downloadsubs'):
++        settings.downloadsubs = True
++        log.info("Download subtitles enabled via CLI flag")
+     if (args['minsize']):
+         try:
+             settings.minimum_size = int(args['minsize'])
