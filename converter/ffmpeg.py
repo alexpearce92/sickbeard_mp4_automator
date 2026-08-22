@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from multiprocessing.sharedctypes import Value
 import os.path
 import os
 import re
@@ -12,6 +13,14 @@ from converter.avcodecs import BaseCodec, video_codec_list
 
 
 console_encoding = locale.getdefaultlocale()[1] or 'UTF-8'
+
+STRICT = {
+    "very": 2,
+    "strict": 1,
+    "normal": 0,
+    "unofficial": -1,
+    "experimental": -2
+}
 
 
 class FFMpegError(Exception):
@@ -153,6 +162,7 @@ class MediaStreamInfo(object):
             out['channels'] = self.audio_channels
             out['samplerate'] = self.audio_samplerate
             out['language'] = language
+            out['profile'] = self.profile
             out['disposition'] = self.dispostr
         elif self.type == 'video':
             out['pix_fmt'] = self.pix_fmt
@@ -232,15 +242,23 @@ class MediaStreamInfo(object):
         elif key == 'DISPOSITION:attached_pic':
             self.attached_pic = self.parse_int(val)
         elif key == 'profile':
-            self.profile = val.lower()
+            self.profile = val.lower().replace(" ", "")
         elif key == 'DISPOSITION:forced':
             self.forced = self.parse_bool(self.parse_int(val))
         elif key == 'DISPOSITION:default':
             self.default = self.parse_bool(self.parse_int(val))
+        elif key.lower().startswith('tag:bps'):
+            self.bitrate = self.bitrate or self.parse_int(val, None)
+
+        if self.bitrate and self.bitrate < 1000:
+            self.bitrate = None
 
         if key.startswith('TAG:'):
             key = key.split('TAG:')[1].lower()
-            value = val.lower().strip()
+            if key in ["title"]:
+                value = val.strip()
+            else:
+                value = val.lower().strip()
             self.metadata[key] = value
 
         if key.startswith('DISPOSITION:'):
@@ -434,11 +452,11 @@ class FFMpeg(object):
     """
     DEFAULT_JPEG_QUALITY = 4
     CODECS_LINE_RE = re.compile(
-        r'^ [A-Z.]{6} ([^ \=]+) +(.+)$', re.M)
+        r'^ ([A-Z.]{6}) ([^ \=]+) +(.+)$', re.M)
     CODECS_DECODERS_RE = re.compile(
-        r' \(decoders: ([^)]+) \)')
+        r' \(decoders: ([^)]+)\)')
     CODECS_ENCODERS_RE = re.compile(
-        r' \(encoders: ([^)]+) \)')
+        r' \(encoders: ([^)]+)\)')
     DECODER_SYNONYMS = {
         'mpeg1video': 'mpeg1',
         'mpeg2video': 'mpeg2'}
@@ -481,13 +499,15 @@ class FFMpeg(object):
     def codecs(self):
         codecs = self._get_stdout([self.ffprobe_path, '-hide_banner', '-codecs'])
         codecs = {
-            line_match.group(1): line_match.group(2)
+            line_match.group(2): (line_match.group(1), line_match.group(3))
             for line_match in self.CODECS_LINE_RE.finditer(codecs)}
 
         for codec, coders in codecs.items():
-            decoders_match = self.CODECS_DECODERS_RE.search(coders)
-            encoders_match = self.CODECS_ENCODERS_RE.search(coders)
-            codecs[codec] = dict(decoders=decoders_match and decoders_match.group(1).split() or [], encoders=encoders_match and encoders_match.group(1).split() or [])
+            decoders_match = self.CODECS_DECODERS_RE.search(coders[1])
+            encoders_match = self.CODECS_ENCODERS_RE.search(coders[1])
+            self_encoder = [codec] if coders[0][1] == "E" else []
+            self_decoder = [codec] if coders[0][0] == "D" else []
+            codecs[codec] = dict(decoders=decoders_match and decoders_match.group(1).split() or self_decoder, encoders=encoders_match and encoders_match.group(1).split() or self_encoder)
         return codecs
 
     @property
@@ -497,16 +517,39 @@ class FFMpeg(object):
     @property
     def encoders(self):
         encoders = self._get_stdout([self.ffmpeg_path, '-hide_banner', '-encoders'])
-        return [line_match.group(1) for line_match in self.CODECS_LINE_RE.finditer(encoders)]
+        return [line_match.group(2) for line_match in self.CODECS_LINE_RE.finditer(encoders)]
 
     @property
     def decoders(self):
         decoders = self._get_stdout([self.ffmpeg_path, '-hide_banner', '-decoders'])
-        return [line_match.group(1) for line_match in self.CODECS_LINE_RE.finditer(decoders)]
+        return [line_match.group(2) for line_match in self.CODECS_LINE_RE.finditer(decoders)]
+
+    @property
+    def pix_fmts(self):
+        formats = {}
+        formatlines = [f.strip() for f in self._get_stdout([self.ffmpeg_path, '-hide_banner', '-pix_fmts']).split('\n')[8:] if f.strip()]
+        for f in formatlines:
+            frmt = [x for x in f.split(" ") if x]
+            if len(frmt) == 5:
+                bitdepth = max([int(b) for b in frmt[4].split("-")])
+                formats[str(frmt[1])] = bitdepth
+        return formats
 
     def hwaccel_decoder(self, video_codec, hwaccel):
         source_codec = self.DECODER_SYNONYMS.get(video_codec, video_codec)
         return '{0}_{1}'.format(source_codec, hwaccel)
+
+    def encoder_formats(self, encoder):
+        prefix = "Supported pixel formats:"
+        formatline = next((line.strip() for line in self._get_stdout([self.ffmpeg_path, '-hide_banner', '-h', 'encoder=%s' % encoder]).split('\n')[1:] if line and line.strip().startswith(prefix)), "")
+        formats = formatline.split(":")
+        return formats[1].strip().split(" ") if formats and len(formats) > 1 else []
+
+    def decoder_formats(self, decoder):
+        prefix = "Supported pixel formats:"
+        formatline = next((line.strip() for line in self._get_stdout([self.ffmpeg_path, '-hide_banner', '-h', 'decoder=%s' % decoder]).split('\n')[1:] if line and line.strip().startswith(prefix)), "")
+        formats = formatline.split(":")
+        return formats[1].strip().split(" ") if formats and len(formats) > 1 else []
 
     @staticmethod
     def _spawn(cmds):
@@ -515,6 +558,8 @@ class FFMpeg(object):
             for cmd in cmds:
                 clean_cmds.append(str(cmd))
             cmds = clean_cmds
+        except KeyboardInterrupt:
+            raise
         except:
             raise FFMpegError("There was an error making all command line parameters a string")
         return Popen(cmds, shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE,
@@ -538,6 +583,8 @@ class FFMpeg(object):
                 '-probesize', '50M', '-analyzeduration', '100M',
                 '-i', fname])
             return json.loads(stdout_data)['frames'][0]
+        except KeyboardInterrupt:
+            raise
         except:
             raise FFMpegError("Unable to obtain FFMPEG framedata")
 
@@ -573,7 +620,7 @@ class FFMpeg(object):
         info.path = fname
 
         stdout_data = self._get_stdout([
-            self.ffprobe_path, '-show_format', '-show_streams', fname])
+            self.ffprobe_path, '-show_format', '-show_streams', '-show_entries', 'stream_tags:format_tags', fname])
         info.parse_ffprobe(stdout_data)
 
         if not info.format.format and len(info.streams) == 0:
@@ -581,12 +628,15 @@ class FFMpeg(object):
 
         try:
             info.video.framedata = self.framedata(fname)
+        except KeyboardInterrupt:
+            raise
         except:
             pass
 
         return info
 
     def generateCommands(self, outfile, opts, preopts=None, postopts=None):
+        print()
         cmds = [self.ffmpeg_path]
         if preopts:
             cmds.extend(preopts)
@@ -594,11 +644,37 @@ class FFMpeg(object):
         cmds.extend(opts)
         if postopts:
             cmds.extend(postopts)
+
+        self.minstrict(cmds)
+
         if outfile:
             cmds.extend(['-y', outfile])
         else:
             cmds.extend(['-f', 'null', '-'])
         return cmds
+
+    def minstrict(self, cmds):
+        """
+        Ensure that only one -strict parameter ends up in the final
+        command and use the least strict option specified
+        """
+        if cmds.count("-strict") > 1:
+            strictmin = max(STRICT.values())
+            indices = []
+            for index, cmd in enumerate(cmds):
+                if cmd == '-strict':
+                    svalue = cmds[index + 1]
+                    try:
+                        svalue = int(svalue)
+                    except:
+                        svalue = STRICT.get(svalue, strictmin)
+                    strictmin = min((svalue, strictmin))
+                    indices.extend([index, index + 1])
+            indices = sorted(indices, reverse=True)
+            for idx in indices:
+                if idx < len(cmds):
+                    cmds.pop(idx)
+            cmds.extend(['-strict', str(strictmin)])
 
     def convert(self, outfile, opts, timeout=10, preopts=None, postopts=None):
         """

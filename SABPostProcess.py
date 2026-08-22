@@ -2,7 +2,7 @@
 
 import os
 import sys
-from autoprocess import autoProcessTV, autoProcessMovie, autoProcessTVSR, sonarr, radarr
+from autoprocess import autoProcessTV, autoProcessTVSR, sonarr, radarr, whisparr
 from resources.log import getLogger
 from resources.readsettings import ReadSettings
 from resources.mediaprocessor import MediaProcessor
@@ -31,7 +31,7 @@ def progressOutput(timecode, debug):
 
 try:
     settings = ReadSettings()
-    categories = [settings.SAB['sb'], settings.SAB['cp'], settings.SAB['sonarr'], settings.SAB['radarr'], settings.SAB['sr'], settings.SAB['bypass']]
+    categories = [settings.SAB['sb'], settings.SAB['sonarr'], settings.SAB['radarr'], settings.SAB['whisparr'], settings.SAB['sr']] + settings.SAB['bypass']
     category = str(sys.argv[5]).lower().strip()
     path = str(sys.argv[1])
     nzb = str(sys.argv[2])
@@ -52,10 +52,10 @@ try:
 
     if settings.SAB['convert']:
         log.info("Performing conversion")
-        # Check for custom uTorrent output_dir
-        if settings.SAB['output_dir']:
-            settings.output_dir = settings.SAB['output_dir']
-            log.debug("Overriding output_dir to %s." % settings.SAB['output_dir'])
+        # Check for custom SAB output directory
+        if settings.SAB['output-dir']:
+            settings.output_dir = settings.SAB['output-dir']
+            log.debug("Overriding output_dir to %s." % settings.SAB['output-dir'])
 
         mp = MediaProcessor(settings)
         ignore = []
@@ -84,22 +84,22 @@ try:
     else:
         log.info("Passing without conversion.")
 
-    if categories[0].startswith(category):
+    if settings.SAB['sb'].startswith(category):
         log.info("Passing %s directory to Sickbeard." % path)
         autoProcessTV.processEpisode(path, settings, nzb, pathMapping=path_mapping)
-    elif categories[1].startswith(category):
-        log.info("Passing %s directory to Couch Potato." % path)
-        autoProcessMovie.process(path, settings, nzb, sys.argv[7], pathMapping=path_mapping)
-    elif categories[2].startswith(category):
+    elif settings.SAB['sonarr'].startswith(category):
         log.info("Passing %s directory to Sonarr." % path)
         sonarr.processEpisode(path, settings, importMode="Move", pathMapping=path_mapping)
-    elif categories[3].startswith(category):
+    elif settings.SAB['radarr'].startswith(category):
         log.info("Passing %s directory to Radarr." % path)
         radarr.processMovie(path, settings, pathMapping=path_mapping)
-    elif categories[4].startswith(category):
+    elif settings.SAB['whisparr'].startswith(category):
+        log.info("Passing %s directory to Whisparr." % path)
+        whisparr.processMovie(path, settings, pathMapping=path_mapping)
+    elif settings.SAB['sr'].startswith(category):
         log.info("Passing %s directory to Sickrage." % path)
         autoProcessTVSR.processEpisode(path, settings, nzb, pathMapping=path_mapping)
-    elif categories[5].startswith(category):
+    elif [x for x in settings.SAB['bypass'] if x.startswith(category)]:
         log.info("Bypassing any further processing as per category.")
 except:
     log.exception("Unexpected exception.")

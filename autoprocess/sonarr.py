@@ -18,10 +18,12 @@ def processEpisode(dirName, settings, nzbGet=False, importMode=None, logger=None
     log.info("%sSonarr notifier started." % infoprefix)
 
     # Path Mapping
-    for k in pathMapping:
-        if dirName.startswith(k):
-            dirName = dirName.replace(k, pathMapping[k], 1)
-            log.info("PathMapping match found, replacing %s with %s, final API directory is %s." % (k, pathMapping[k], dirName))
+    targetdirs = dirName.split(os.sep)
+    for k in sorted(pathMapping.keys(), reverse=True):
+        mapdirs = k.split(os.sep)
+        if mapdirs == targetdirs[:len(mapdirs)]:
+            dirName = os.path.normpath(os.path.join(pathMapping[k], os.path.relpath(dirName, k)))
+            log.debug("PathMapping match found, replacing %s with %s, final directory is %s." % (k, pathMapping[k], dirName))
             break
 
     # Import Requests
@@ -50,11 +52,14 @@ def processEpisode(dirName, settings, nzbGet=False, importMode=None, logger=None
         protocol = "http://"
 
     webroot = settings.Sonarr['webroot']
-    url = protocol + host + ":" + str(port) + webroot + "/api/command"
-    payload = {'name': 'downloadedepisodesscan', 'path': dirName}
+    url = protocol + host + ":" + str(port) + webroot + "/api/v3/command"
+    payload = {'name': 'DownloadedEpisodesScan', 'path': dirName}
     if importMode:
         payload["importMode"] = importMode
-    headers = {'X-Api-Key': apikey}
+    headers = {
+        'X-Api-Key': apikey,
+        'User-Agent': "SMA - autoprocess/sonarr"
+    }
 
     log.debug("Sonarr host: %s." % host)
     log.debug("Sonarr port: %s." % port)
@@ -79,7 +84,11 @@ def accessAPI(url, payload, headers, log, requests, nzbGet, sleep=10, retry=0, m
         r = requests.post(url, json=payload, headers=headers)
         rstate = r.json()
         log.debug(rstate)
-        log.info("%sSonarr response: %s." % (infoprefix, rstate['state']))
+        try:
+            rstate = rstate[0]
+        except:
+            pass
+        log.info("%sSonarr response DownloadedEpisodesScan command: ID %s %s." % (infoprefix, rstate['id'], rstate['status']))
         if rstate['body']['path'] != payload['path']:
             if retry > maxretry:
                 log.error("Sonarr returned path %s that does not match the directory that was requested to be scanned %s. Maximum number of retries exceeded (%d)." % (rstate['body']['path'], payload['path'], maxretry))

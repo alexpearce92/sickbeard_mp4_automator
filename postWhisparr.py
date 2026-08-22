@@ -10,10 +10,10 @@ from resources.metadata import MediaType
 from resources.mediaprocessor import MediaProcessor
 
 
-# Radarr API functions
+# Whisparr API functions
 def rescanRequest(baseURL, headers, movieid, log):
     url = baseURL + "/api/v3/command"
-    log.debug("Queueing rescan command to Radarr via %s." % url)
+    log.debug("Queueing rescan command to Whisparr via %s." % url)
 
     # First trigger rescan
     payload = {'name': 'RescanMovie', 'movieId': movieid}
@@ -26,13 +26,13 @@ def rescanRequest(baseURL, headers, movieid, log):
     except:
         pass
     log.debug(str(rstate))
-    log.info("Radarr response from RescanMovie command: ID %d %s." % (rstate['id'], rstate['status']))
+    log.info("Whisparr response from RescanMovie command: ID %d %s." % (rstate['id'], rstate['status']))
     return rstate
 
 
 def waitForCommand(baseURL, headers, commandID, log, retries=6, delay=10):
     url = baseURL + "/api/v3/command/" + str(commandID)
-    log.debug("Requesting command status from Radarr for command ID %d." % commandID)
+    log.debug("Requesting command status from Whisparr for command ID %d." % commandID)
     r = requests.get(url, headers=headers)
     command = r.json()
 
@@ -50,7 +50,7 @@ def waitForCommand(baseURL, headers, commandID, log, retries=6, delay=10):
 
 def renameRequest(baseURL, headers, fileid, movieid, log):
     url = baseURL + "/api/v3/command"
-    log.debug("Queueing rename command to Radarr via %s." % url)
+    log.debug("Queueing rename command to Whisparr via %s." % url)
 
     if fileid:
         payload = {'name': 'RenameFiles', 'files': [fileid], 'movieId': movieid}
@@ -64,13 +64,13 @@ def renameRequest(baseURL, headers, fileid, movieid, log):
     except:
         pass
     log.debug(str(rstate))
-    log.info("Radarr response from Rename command: ID %d %s." % (rstate['id'], rstate['status']))
+    log.info("Whisparr response from Rename command: ID %d %s." % (rstate['id'], rstate['status']))
     return rstate
 
 
 def downloadedMoviesScanInProgress(baseURL, headers, moviefile_sourcefolder, log):
     url = baseURL + "/api/v3/command"
-    log.debug("Requesting commands in process from Radarr via %s." % url)
+    log.debug("Requesting commands in process from Whisparr via %s." % url)
     r = requests.get(url, headers=headers)
     commands = r.json()
     log.debug(commands)
@@ -89,7 +89,7 @@ def downloadedMoviesScanInProgress(baseURL, headers, moviefile_sourcefolder, log
 
 def getMovie(baseURL, headers, movieid, log):
     url = baseURL + "/api/v3/movie/" + str(movieid)
-    log.debug("Requesting movie from Radarr via %s." % url)
+    log.debug("Requesting movie from Whisparr via %s." % url)
     r = requests.get(url, headers=headers)
     payload = r.json()
     return payload
@@ -97,7 +97,7 @@ def getMovie(baseURL, headers, movieid, log):
 
 def updateMovie(baseURL, headers, new, movieid, log):
     url = baseURL + "/api/v3/movie/" + str(movieid)
-    log.debug("Requesting movie update to Radarr via %s." % url)
+    log.debug("Requesting movie update to Whisparr via %s." % url)
     r = requests.put(url, json=new, headers=headers)
     payload = r.json()
     return payload
@@ -105,7 +105,7 @@ def updateMovie(baseURL, headers, new, movieid, log):
 
 def getMovieFile(baseURL, headers, moviefileid, log):
     url = baseURL + "/api/v3/moviefile/" + str(moviefileid)
-    log.debug("Requesting moviefile from Radarr for moviefile via %s." % url)
+    log.debug("Requesting moviefile from Whisparr for moviefile via %s." % url)
     r = requests.get(url, headers=headers)
     payload = r.json()
     return payload
@@ -113,7 +113,7 @@ def getMovieFile(baseURL, headers, moviefileid, log):
 
 def updateMovieFile(baseURL, headers, new, moviefileid, log):
     url = baseURL + "/api/v3/moviefile/" + str(moviefileid)
-    log.debug("Requesting moviefile update to Radarr via %s." % url)
+    log.debug("Requesting moviefile update to Whisparr via %s." % url)
     r = requests.put(url, json=new, headers=headers)
     payload = r.json()
     return payload
@@ -167,16 +167,16 @@ def restoreSubs(subs, log):
             log.exception("Unable to restore %s, deleting." % (k))
 
 
-log = getLogger("RadarrPostProcess")
+log = getLogger("WhisparrPostProcess")
 
-log.info("Radarr extra script post processing started.")
+log.info("Whisparr extra script post processing started.")
 
-if os.environ.get('radarr_eventtype') == "Test":
-    log.info("Successful postRadarr.py SMA test, exiting.")
+if os.environ.get('whisparr_eventtype') == "Test":
+    log.info("Successful postWhisparr.py SMA test, exiting.")
     sys.exit(0)
 
-if os.environ.get('radarr_eventtype') != "Download":
-    log.error("Invalid event type %s, script only works for On Download/On Import and On Upgrade." % (os.environ.get('radarr_eventtype')))
+if os.environ.get('whisparr_eventtype') != "Download":
+    log.error("Invalid event type %s, script only works for On Download/On Import and On Upgrade." % (os.environ.get('whisparr_eventtype')))
     sys.exit(1)
 
 try:
@@ -184,33 +184,33 @@ try:
 
     log.debug(os.environ)
 
-    inputfile = os.environ.get('radarr_moviefile_path')
-    original = os.environ.get('radarr_moviefile_scenename')
-    imdbid = os.environ.get('radarr_movie_imdbid')
-    tmdbid = os.environ.get('radarr_movie_tmdbid')
-    movieid = int(os.environ.get('radarr_movie_id'))
-    moviefileid = int(os.environ.get('radarr_moviefile_id'))
-    scenename = os.environ.get('radarr_moviefile_scenename')
-    releasegroup = os.environ.get('radarr_moviefile_releasegroup')
-    moviefile_sourcefolder = os.environ.get('radarr_moviefile_sourcefolder')
+    inputfile = os.environ.get('whisparr_moviefile_path')
+    original = os.environ.get('whisparr_moviefile_scenename')
+    imdbid = os.environ.get('whisparr_movie_imdbid')
+    tmdbid = os.environ.get('whisparr_movie_tmdbid')
+    movieid = int(os.environ.get('whisparr_movie_id'))
+    moviefileid = int(os.environ.get('whisparr_moviefile_id'))
+    scenename = os.environ.get('whisparr_moviefile_scenename')
+    releasegroup = os.environ.get('whisparr_moviefile_releasegroup')
+    moviefile_sourcefolder = os.environ.get('whisparr_moviefile_sourcefolder')
 except:
     log.exception("Error reading environment variables")
     sys.exit(1)
 
 mp = MediaProcessor(settings)
 
-if settings.Radarr.get('blockreprocess'):
-    log.debug("Block reprocess enabled for Radarr")
+if settings.Whisparr.get('blockreprocess'):
+    log.debug("Block reprocess enabled for Whisparr")
     settings.process_same_extensions = False
 
 log.debug("Input file: %s." % inputfile)
 log.debug("Original name: %s." % original)
 log.debug("IMDB ID: %s." % imdbid)
 log.debug("TMDB ID: %s." % tmdbid)
-log.debug("Radarr Movie ID: %d." % movieid)
+log.debug("Whisparr Movie ID: %d." % movieid)
 
 try:
-    if settings.Radarr.get('rename'):
+    if settings.Whisparr.get('rename'):
         # Prevent asynchronous errors from file name changing
         mp.settings.waitpostprocess = True
         try:
@@ -224,34 +224,34 @@ try:
         log.info("Processing returned False.")
         sys.exit(1)
 
-    if success and not settings.Radarr['rescan']:
+    if success and not settings.Whisparr['rescan']:
         log.info("File processed successfully and rescan API update disabled.")
         sys.exit(0)
 
     try:
-        host = settings.Radarr['host']
-        port = settings.Radarr['port']
-        webroot = settings.Radarr['webroot']
-        apikey = settings.Radarr['apikey']
-        ssl = settings.Radarr['ssl']
+        host = settings.Whisparr['host']
+        port = settings.Whisparr['port']
+        webroot = settings.Whisparr['webroot']
+        apikey = settings.Whisparr['apikey']
+        ssl = settings.Whisparr['ssl']
         protocol = "https://" if ssl else "http://"
         baseURL = protocol + host + ":" + str(port) + webroot
 
-        log.debug("Radarr baseURL: %s." % baseURL)
-        log.debug("Radarr apikey: %s." % apikey)
+        log.debug("Whisparr baseURL: %s." % baseURL)
+        log.debug("Whisparr apikey: %s." % apikey)
 
         if not apikey:
-            log.error("Your Radarr API Key is blank. Update autoProcess.ini to enable status updates.")
+            log.error("Your Whisparr API Key is blank. Update autoProcess.ini to enable status updates.")
             sys.exit(1)
 
         headers = {
             'X-Api-Key': apikey,
-            'User-Agent': "SMA - postRadarr"
+            'User-Agent': "SMA - postWhisparr"
         }
 
         subs = backupSubs(success[0], mp, log)
 
-        inProcess = settings.Radarr['in-progress-check'] and downloadedMoviesScanInProgress(baseURL, headers, moviefile_sourcefolder, log)
+        inProcess = settings.Whisparr['in-progress-check'] and downloadedMoviesScanInProgress(baseURL, headers, moviefile_sourcefolder, log)
         if inProcess and not waitForCommand(baseURL, headers, inProcess, log):
             log.info("DownloadedMoviesScan command is in process for this movie, timed out for rescan but will queue.")
             rescanRequest(baseURL, headers, movieid, log)
@@ -297,7 +297,7 @@ try:
             movieinfo['monitored'] = True
             movieinfo = updateMovie(baseURL, headers, movieinfo, movieid, log)
             log.debug(str(movieinfo))
-            log.info("Radarr monitoring information updated for movie %s." % movieinfo['title'])
+            log.info("Whisparr monitoring information updated for movie %s." % movieinfo['title'])
         except:
             log.exception("Failed to restore monitored status to movie.")
 
@@ -322,10 +322,10 @@ try:
                 finalMovieFile = getMovieFile(baseURL, headers, movieinfo['movieFile']['id'], log)
                 success[0] = finalMovieFile.get("path", success[0])
         except:
-            log.exception("Failed to trigger Radarr rename.")
+            log.exception("Failed to trigger Whisparr rename.")
         mp.post(success, MediaType.Movie, tmdbid=tmdbid, imdbid=imdbid)
     except:
-        log.exception("Radarr monitor status update failed.")
+        log.exception("Whisparr monitor status update failed.")
 
 except:
     log.exception("Error processing file.")

@@ -2,7 +2,7 @@
 
 import os
 
-from converter.avcodecs import video_codec_list, audio_codec_list, subtitle_codec_list, attachment_codec_list
+from converter.avcodecs import video_codec_list, audio_codec_list, subtitle_codec_list, attachment_codec_list, decoder_list, BaseDecoder
 from converter.formats import format_list
 from converter.ffmpeg import FFMpeg, FFMpegError, FFMpegConvertError
 
@@ -51,18 +51,27 @@ class Converter(object):
             name = cls.format_name
             self.formats[name] = cls
 
-    def ffmpeg_codec_name_to_codec_name(self, type, ffmpeg_codec_name):
-        if type == 'video':
-            return next((x.codec_name for x in video_codec_list if x.ffmpeg_codec_name == ffmpeg_codec_name), None)
-        elif type == 'audio':
-            return next((x.codec_name for x in audio_codec_list if x.ffmpeg_codec_name == ffmpeg_codec_name), None)
-        elif type == 'subtitle':
-            return next((x.codec_name for x in subtitle_codec_list if x.ffmpeg_codec_name == ffmpeg_codec_name), None)
-        elif type == 'attachment':
-            return next((x.codec_name for x in attachment_codec_list if x.ffmpeg_codec_name == ffmpeg_codec_name), None)
-        return None
+    @staticmethod
+    def ffmpeg_codec_name_to_codec_name(type, ffmpeg_codec_name):
+        return next((x.codec_name for x in video_codec_list + audio_codec_list + subtitle_codec_list + attachment_codec_list if x.ffmpeg_codec_name == ffmpeg_codec_name), None)
 
-    def parse_options(self, opt, twopass=None, strip_metadata=False):
+    @staticmethod
+    def codec_name_to_ffprobe_codec_name(codec_name):
+        return next((x.ffprobe_codec_name for x in video_codec_list + audio_codec_list + subtitle_codec_list + attachment_codec_list if x.codec_name == codec_name), None)
+
+    @staticmethod
+    def codec_name_to_ffmpeg_codec_name(codec_name):
+        return next((x.ffmpeg_codec_name for x in video_codec_list + audio_codec_list + subtitle_codec_list + attachment_codec_list if x.codec_name == codec_name), None)
+
+    @staticmethod
+    def decoder(decoder):
+        return next((x() for x in decoder_list if x.decoder_name == decoder), BaseDecoder())
+
+    @staticmethod
+    def encoder(encoder):
+        return next((x() for x in video_codec_list + audio_codec_list + subtitle_codec_list + attachment_codec_list if x.codec_name == encoder), None)
+
+    def parse_options(self, opt, twopass=None, strip_metadata=False, fix_sub_duration=True):
         """
         Parse format/codec options and prepare raw ffmpeg option list.
         """
@@ -98,9 +107,16 @@ class Converter(object):
             for x in y:
                 if not os.path.exists(x):
                     raise ConverterError('Source file does not exist')
-                if 'sub-encoding' in opt:
-                    sindex = opt['source'].index(x)
-                    if len([x for x in opt.get('subtitle', []) if x.get('source') == sindex]) > 0:
+
+                # Creates the new nested dictionary to preserve backwards compatibility
+                if 'subtitle' in opt and isinstance(opt['subtitle'], dict):
+                    opt['subtitle'] = [opt['subtitle']]
+
+                sindex = opt['source'].index(x)
+                if any(s.get("source", 0) == sindex for s in opt["subtitle"]):
+                    if fix_sub_duration:
+                        source_options.append('-fix_sub_duration')
+                    if 'sub-encoding' in opt:
                         source_options.extend(['-sub_charenc', opt['sub-encoding']])
                 source_options.extend(['-i', x])
 
@@ -108,7 +124,7 @@ class Converter(object):
         if 'audio' in opt:
             y = opt['audio']
 
-            # Creates the new nested dictionary to preserve backwards compatability
+            # Creates the new nested dictionary to preserve backwards compatibility
             if isinstance(y, dict):
                 y = [y]
 
@@ -128,7 +144,7 @@ class Converter(object):
         if 'subtitle' in opt:
             y = opt['subtitle']
 
-            # Creates the new nested dictionary to preserve backwards compatability
+            # Creates the new nested dictionary to preserve backwards compatibility
             if isinstance(y, dict):
                 y = [y]
 
@@ -148,7 +164,7 @@ class Converter(object):
         if 'attachment' in opt:
             y = opt['attachment']
 
-            # Creates the new nested dictionary to preserve backwards compatability
+            # Creates the new nested dictionary to preserve backwards compatibility
             if isinstance(y, dict):
                 y = [y]
 
@@ -195,7 +211,7 @@ class Converter(object):
 
         return optlist
 
-    def tag(self, infile, metadata={}, coverpath=None):
+    def tag(self, infile, metadata={}, coverpath=None, cues_to_front=False):
         """
         Tag media file (infile) with metadata dictionary and optional cover art
         """
@@ -222,11 +238,14 @@ class Converter(object):
         for k in metadata:
             opts.extend(["-metadata", "%s=%s" % (k, metadata[k])])
 
-        for timecode, debug in self.ffmpeg.convert(outfile, opts):
+        if cues_to_front:
+            opts.extend(['-cues_to_front', "true"])
+
+        for timecode, debug in self.ffmpeg.convert(outfile, opts, timeout=0):
             yield int((100.0 * timecode) / info.format.duration), debug
         os.remove(infile)
 
-    def convert(self, outfile, options, twopass=False, timeout=10, preopts=None, postopts=None, strip_metadata=False):
+    def convert(self, outfile, options, twopass=False, timeout=10, preopts=None, postopts=None, strip_metadata=False, fix_sub_duration=True):
         """
         Convert media file (infile) according to specified options, and
         save it to outfile. For two-pass encoding, specify the pass (1 or 2)
@@ -297,7 +316,7 @@ class Converter(object):
             raise ConverterError('Zero-length media')
 
         if twopass:
-            optlist1 = self.parse_options(options, 1, strip_metadata=strip_metadata)
+            optlist1 = self.parse_options(options, 1, strip_metadata=strip_metadata, fix_sub_duration=fix_sub_duration)
             for timecode, debug in self.ffmpeg.convert(outfile,
                                                        optlist1,
                                                        timeout=timeout,
@@ -305,7 +324,7 @@ class Converter(object):
                                                        postopts=postopts):
                 yield int((50.0 * timecode) / info.format.duration), debug
 
-            optlist2 = self.parse_options(options, 2, strip_metadata=strip_metadata)
+            optlist2 = self.parse_options(options, 2, strip_metadata=strip_metadata, fix_sub_duration=fix_sub_duration)
             for timecode, debug in self.ffmpeg.convert(outfile,
                                                        optlist2,
                                                        timeout=timeout,
@@ -313,7 +332,7 @@ class Converter(object):
                                                        postopts=postopts):
                 yield int(50.0 + (50.0 * timecode) / info.format.duration), debug
         else:
-            optlist = self.parse_options(options, twopass, strip_metadata=strip_metadata)
+            optlist = self.parse_options(options, twopass, strip_metadata=strip_metadata, fix_sub_duration=fix_sub_duration)
             for timecode, debug in self.ffmpeg.convert(outfile,
                                                        optlist,
                                                        timeout=timeout,

@@ -58,7 +58,7 @@ class SMAConfigParser(ConfigParser, object):
     def getdirectory(self, section, option, vars=None):
         directory = self.getpath(section, option, vars)
         try:
-            os.path.makedirs(directory)
+            os.makedirs(directory)
         except:
             pass
         return directory
@@ -69,7 +69,7 @@ class SMAConfigParser(ConfigParser, object):
         for d in directories:
             if not os.path.isdir(d):
                 try:
-                    os.path.makedirs(d)
+                    os.makedirs(d)
                 except:
                     pass
         return directories
@@ -83,23 +83,27 @@ class SMAConfigParser(ConfigParser, object):
     def getextensions(self, section, option, separator=",", vars=None):
         return self.getlist(section, option, vars, separator, replace=[' ', '.'])
 
-    def getint(self, section, option, vars=None):
+    def getint(self, section, option, vars=None, fallback=0):
         if sys.version[0] == '2':
-            return int(super(SMAConfigParser, self).get(section, option, vars=vars))
-        return super(SMAConfigParser, self).getint(section, option, vars=vars)
+            return int(super(SMAConfigParser, self).get(section, option, vars=vars, fallback=fallback))
+        return super(SMAConfigParser, self).getint(section, option, vars=vars, fallback=fallback)
+
+    def getboolean(self, section, option, vars=None, fallback=False):
+        return super(SMAConfigParser, self).getboolean(section, option, vars=vars, fallback=fallback)
 
 
 class ReadSettings:
-    defaults = {
+    DEFAULTS = {
         'Converter': {
             'ffmpeg': 'ffmpeg' if os.name != 'nt' else 'ffmpeg.exe',
             'ffprobe': 'ffprobe' if os.name != 'nt' else 'ffprobe.exe',
             'threads': 0,
             'hwaccels': '',
-            'hwaccel-decoders': 'h264_cuvid, mjpeg_cuvid, mpeg1_cuvid, mpeg2_cuvid, mpeg4_cuvid, vc1_cuvid, hevc_qsv, h264_qsv, hevc_vaapi, h264_vaapi',
-            'hwdevices': 'vaapi:/dev/dri/renderD128',
-            'hwaccel-output-format': 'vaapi:vaapi',
+            'hwaccel-decoders': '',
+            'hwdevices': '',
+            'hwaccel-output-format': '',
             'output-directory': '',
+            'output-directory-space-ratio': 0.0,
             'output-format': 'mp4',
             'output-extension': 'mp4',
             'temp-extension': '',
@@ -108,7 +112,6 @@ class ReadSettings:
             'copy-to': '',
             'move-to': '',
             'delete-original': True,
-            'sort-streams': True,
             'process-same-extensions': False,
             'bypass-if-copying-all': False,
             'force-convert': False,
@@ -121,7 +124,7 @@ class ReadSettings:
             'regex-directory-replace': r'[^\w\-_\. ]',
         },
         'Permissions': {
-            'chmod': '0644',
+            'chmod': '0664',
             'uid': -1,
             'gid': -1,
         },
@@ -133,6 +136,7 @@ class ReadSettings:
             'download-artwork': 'poster',
             'sanitize-disposition': '',
             'strip-metadata': False,
+            'keep-titles': False,
         },
         'Video': {
             'codec': 'h264, x264',
@@ -147,6 +151,7 @@ class ReadSettings:
             'profile': '',
             'max-level': 0.0,
             'pix-fmt': '',
+            'prioritize-source-pix-fmt': True,
             'filter': '',
             'force-filter': False,
         },
@@ -166,28 +171,37 @@ class ReadSettings:
             'codec': 'ac3',
             'languages': '',
             'default-language': '',
+            'include-original-language': True,
             'first-stream-of-language': False,
-            'allow-language-relax': True,
             'channel-bitrate': 128,
+            'variable-bitrate': 0,
             'max-bitrate': 0,
             'max-channels': 0,
-            'prefer-more-channels': True,
-            'default-more-channels': True,
             'filter': '',
+            'profile': '',
             'force-filter': False,
             'sample-rates': '',
+            'sample-format': '',
+            'atmos-force-copy': False,
             'copy-original': False,
             'aac-adtstoasc': False,
-            'ignore-truehd': 'mp4, m4v',
             'ignored-dispositions': '',
+            'force-default': False,
             'unique-dispositions': False,
+            'stream-codec-combinations': '',
+        },
+        'Audio.Sorting': {
+            'sorting': 'language, channels.d, map, d.comment',
+            'default-sorting': 'channels.d, map, d.comment',
+            'codecs': '',
         },
         'Universal Audio': {
             'codec': 'aac',
             'channel-bitrate': 128,
+            'variable-bitrate': 0,
             'first-stream-only': False,
-            'move-after': False,
             'filter': '',
+            'profile': '',
             'force-filter': False,
         },
         'Audio.ChannelFilters': {
@@ -198,6 +212,8 @@ class ReadSettings:
             'codec-image-based': '',
             'languages': '',
             'default-language': '',
+            'force-default': True,
+            'include-original-language': False,
             'first-stream-of-language': False,
             'encoding': '',
             'burn-subtitles': False,
@@ -208,12 +224,29 @@ class ReadSettings:
             'filename-dispositions': 'forced',
             'ignore-embedded-subs': False,
             'ignored-dispositions': '',
+            'force-default': False,
             'unique-dispositions': False,
             'attachment-codec': '',
+            'remove-bitstream-subs': False,
+            'fix-sub-duration': True,
+        },
+        'Subtitle.Sorting': {
+            'sorting': 'language, d.comment, d.default.d, d.forced.d',
+            'codecs': '',
+            'burn-sorting': 'language, d.comment, d.default.d, d.forced.d',
+        },
+        'Subtitle.CleanIt': {
+            'enabled': False,
+            'config-path': '',
+            'tags': '',
+        },
+        'Subtitle.FFSubsync': {
+            'enabled': False,
         },
         'Subtitle.Subliminal': {
             'download-subs': False,
-            'download-hearing-impaired-subs': False,
+            'download-forced-subs': False,
+            'include-hearing-impaired-subs': False,
             'providers': '',
         },
         'Subtitle.Subliminal.Auth': {
@@ -228,6 +261,7 @@ class ReadSettings:
             'webroot': '',
             'force-rename': False,
             'rescan': True,
+            'in-progress-check': True,
             'block-reprocess': False,
         },
         'Radarr': {
@@ -238,6 +272,18 @@ class ReadSettings:
             'webroot': '',
             'force-rename': False,
             'rescan': True,
+            'in-progress-check': True,
+            'block-reprocess': False,
+        },
+        'Whisparr': {
+            'host': 'localhost',
+            'port': 6969,
+            'apikey': '',
+            'ssl': False,
+            'webroot': '',
+            'force-rename': False,
+            'rescan': True,
+            'in-progress-check': True,
             'block-reprocess': False,
         },
         'Sickbeard': {
@@ -258,35 +304,23 @@ class ReadSettings:
             'username': '',
             'password': '',
         },
-        'CouchPotato': {
-            'host': 'localhost',
-            'port': 5050,
-            'username': '',
-            'password': '',
-            'apikey': '',
-            'delay': 65,
-            'method': 'renamer',
-            'delete-failed': False,
-            'ssl': False,
-            'webroot': '',
-        },
         'SABNZBD': {
             'convert': True,
             'sickbeard-category': 'sickbeard',
             'sickrage-category': 'sickrage',
-            'couchpotato-category': 'couchpotato',
             'sonarr-category': 'sonarr',
             'radarr-category': 'radarr',
+            'whisparr-category': 'whisparr',
             'bypass-category': 'bypass',
             'output-directory': '',
             'path-mapping': '',
         },
         'Deluge': {
-            'couchpotato-label': 'couchpotato',
             'sickbeard-label': 'sickbeard',
             'sickrage-label': 'sickrage',
             'sonarr-label': 'sonarr',
             'radarr-label': 'radarr',
+            'whisparr-label': 'whisparr',
             'bypass-label': 'bypass',
             'convert': True,
             'host': 'localhost',
@@ -298,11 +332,11 @@ class ReadSettings:
             'path-mapping': '',
         },
         'qBittorrent': {
-            'couchpotato-label': 'couchpotato',
             'sickbeard-label': 'sickbeard',
             'sickrage-label': 'sickrage',
             'sonarr-label': 'sonarr',
             'radarr-label': 'radarr',
+            'whisparr-label': 'whisparr',
             'bypass-label': 'bypass',
             'convert': True,
             'action-before': '',
@@ -316,11 +350,11 @@ class ReadSettings:
             'path-mapping': '',
         },
         'uTorrent': {
-            'couchpotato-label': 'couchpotato',
             'sickbeard-label': 'sickbeard',
             'sickrage-label': 'sickrage',
             'sonarr-label': 'sonarr',
             'radarr-label': 'radarr',
+            'whisparr-label': 'whisparr',
             'bypass-label': 'bypass',
             'convert': True,
             'webui': False,
@@ -335,198 +369,29 @@ class ReadSettings:
             'path-mapping': '',
         },
         'Plex': {
+            'username': '',
+            'password': '',
+            'servername': '',
             'host': 'localhost',
             'port': 32400,
             'refresh': False,
             'token': '',
+            'ssl': True,
+            'ignore-certs': False,
+            'path-mapping': ''
         },
     }
 
-    migration = {
-        'MP4': {
-            'ffmpeg': "Converter.ffmpeg",
-            'ffprobe': "Converter.ffprobe",
-            'threads': 'Converter.threads',
-            'output_directory': 'Converter.output-directory',
-            'copy_to': 'Converter.copy-to',
-            'move_to': 'Converter.move-to',
-            'output_extension': 'Converter.output-extension',
-            'temp_extension': 'Converter.temp-extension',
-            'output_format': 'Converter.output-format',
-            'delete_original': 'Converter.delete-original',
-            'relocate_moov': 'Metadata.relocate-moov',
-            'ios-audio': 'Universal Audio.codec',
-            'ios-first-track-only': 'Universal Audio.first-stream-only',
-            'ios-move-last': 'Universal Audio.move-after',
-            'ios-audio-filter': 'Universal Audio.filter',
-            'max-audio-channels': 'Audio.max-channels',
-            'audio-language': 'Audio.languages',
-            'audio-default-language': 'Audio.default-language',
-            'audio-codec': 'Audio.codec',
-            'ignore-truehd': 'Audio.ignore-truehd',
-            'audio-filter': 'Audio.filter',
-            'audio-sample-rates': 'Audio.sample-rates',
-            'audio-channel-bitrate': 'Audio.channel-bitrate',
-            'audio-copy-original': 'Audio.copy-original',
-            'audio-first-track-of-language': 'Audio.first-stream-of-language',
-            'allow-audio-language-relax': 'Audio.allow-language-relax',
-            'sort-streams': 'Converter.sort-streams',
-            'prefer-more-channels': 'Audio.prefer-more-channels',
-            'video-codec': 'Video.codec',
-            'video-bitrate': 'Video.max-bitrate',
-            'video-crf': 'Video.crf',
-            'video-crf-profiles': 'Video.crf-profiles',
-            'video-max-width': 'Video.max-width',
-            'video-profile': 'Video.profile',
-            'h264-max-level': 'Video.max-level',
-            'aac_adtstoasc': 'Audio.aac-adtstoasc',
-            'hwaccels': 'Converter.hwaccels',
-            'hwaccel-decoders': 'Converter.hwaccel-decoders',
-            'subtitle-codec': 'Subtitle.codec',
-            'subtitle-codec-image-based': 'Subtitle.codec-image-based',
-            'subtitle-language': 'Subtitle.languages',
-            'subtitle-default-language': 'Subtitle.default-language',
-            'subtitle-encoding': 'Subtitle.encoding',
-            'burn-subtitles': 'Subtitle.burn-subtitles',
-            'attachment-codec': 'Subtitle.attachment-codec',
-            'process-same-extensions': 'Converter.process-same-extensions',
-            'force-convert': 'Converter.force-convert',
-            'fullpathguess': 'Metadata.full-path-guess',
-            'tagfile': 'Metadata.tag',
-            'tag-language': 'Metadata.tag-language',
-            'download-artwork': 'Metadata.download-artwork',
-            'download-subs': 'Subtitle.download-subs',
-            'download-hearing-impaired-subs': 'Subtitle.download-hearing-impaired-subs',
-            'embed-subs': 'Subtitle.embed-subs',
-            'embed-image-subs': 'Subtitle.embed-image-subs',
-            'embed-only-internal-subs': 'Subtitle.embed-only-internal-subs',
-            'sub-providers': 'Subtitle.download-providers',
-            'post-process': 'Converter.post-process',
-            'ignored-extensions': 'Converter.ignored-extensions',
-            'pix-fmt': 'Video.pix-fmt',
-            'preopts': 'Converter.preopts',
-            'postopts': 'Converter.postopts',
-        },
-        'SickBeard': {
-            'host': 'Sickbeard.host',
-            'port': 'Sickbeard.port',
-            'ssl': "Sickbeard.ssl",
-            'api_key': 'Sickbeard.apikey',
-            'web_root': 'Sickbeard.webroot',
-            'username': 'Sickbeard.username',
-            'password': 'Sickbeard.password'
-        },
-        'CouchPotato': {
-            'host': 'CouchPotato.host',
-            'port': 'CouchPotato.port',
-            'username': 'CouchPotato.username',
-            'password': 'CouchPotato.password',
-            'apikey': 'CouchPotato.apikey',
-            'delay': 'CouchPotato.delay',
-            'method': 'CouchPotato.method',
-            'delete_failed': 'CouchPotato.delete-failed',
-            'ssl': 'CouchPotato.ssl',
-            'web_root': 'CouchPotato.webroot',
-        },
-        'Sonarr': {
-            'host': 'Sonarr.host',
-            'port': 'Sonarr.port',
-            'apikey': 'Sonarr.apikey',
-            'ssl': 'Sonarr.ssl',
-            'web_root': 'Sonarr.webroot',
-        },
-        "Radarr": {
-            'host': 'Radarr.host',
-            'port': 'Radarr.port',
-            'apikey': 'Radarr.apikey',
-            'ssl': 'Radarr.ssl',
-            'web_root': 'Radarr.webroot',
-        },
-        'uTorrent': {
-            'couchpotato-label': 'uTorrent.couchpotato-label',
-            'sickbeard-label': 'uTorrent.sickbeard-label',
-            'sickrage-label': 'uTorrent.sickrage-label',
-            'sonarr-label': 'uTorrent.sonarr-label',
-            'radarr-label': 'uTorrent.radarr-label',
-            'bypass-label': 'uTorrent.bypass-label',
-            'convert': 'uTorrent.convert',
-            'webui': 'uTorrent.webui',
-            'action_before': 'uTorrent.action-before',
-            'action_after': 'uTorrent.action-after',
-            'host': 'uTorrent.host',
-            'username': 'uTorrent.username',
-            'password': 'uTorrent.password',
-            'output_directory': 'uTorrent.output-directory',
-        },
-        "SABNZBD": {
-            'convert': 'SABNZBD.convert',
-            'sickbeard-category': 'SABNZBD.sickbeard-category',
-            'sickrage-category': 'SABNZBD.sickrage-category',
-            'couchpotato-category': 'SABNZBD.couchpotato-category',
-            'sonarr-category': 'SABNZBD.sonarr-category',
-            'radarr-category': 'SABNZBD.radarr-category',
-            'bypass-category': 'SABNZBD.bypass-category',
-            'output_directory': 'SABNZBD.output-directory',
-        },
-        "Sickrage": {
-            'host': 'Sickrage.host',
-            'port': 'Sickrage.port',
-            'ssl': "Sickrage.ssl",
-            'api_key': 'Sickrage.apikey',
-            'web_root': 'Sickrage.webroot',
-            'username': 'Sickrage.username',
-            'password': 'Sickrage.password',
-        },
-        "Deluge": {
-            'couchpotato-label': 'Deluge.couchpotato-label',
-            'sickbeard-label': 'Deluge.sickbeard-label',
-            'sickrage-label': 'Deluge.sickrage-label',
-            'sonarr-label': 'Deluge.sonarr-label',
-            'radarr-label': 'Deluge.radarr-label',
-            'bypass-label': 'Deluge.bypass-label',
-            'convert': 'Deluge.convert',
-            'host': 'Deluge.host',
-            'port': 'Deluge.port',
-            'username': 'Deluge.username',
-            'password': 'Deluge.password',
-            'output_directory': 'Deluge.output-directory',
-            'remove': 'Deluge.remove',
-        },
-        "qBittorrent": {
-            'couchpotato-label': 'qBittorrent.couchpotato-label',
-            'sickbeard-label': 'qBittorrent.sickbeard-label',
-            'sickrage-label': 'qBittorrent.sickrage-label',
-            'sonarr-label': 'qBittorrent.sonarr-label',
-            'radarr-label': 'qBittorrent.radarr-label',
-            'bypass-label': 'qBittorrent.bypass-label',
-            'convert': 'qBittorrent.convert',
-            'action_before': 'qBittorrent.action-before',
-            'action_after': 'qBittorrent.action-after',
-            'host': 'qBittorrent.host',
-            'username': 'qBittorrent.username',
-            'password': 'qBittorrent.password',
-            'output_directory': 'qBittorrent.output-directory',
-        },
-        "Plex": {
-            'host': 'Plex.host',
-            'port': 'Plex.port',
-            'refresh': 'Plex.refresh',
-            'token': 'Plex.token'
-        },
-        "Permissions": {
-            'chmod': 'Permissions.chmod',
-            'uid': 'Permissions.uid',
-            'gid': 'Permissions.gid'
-        }
-    }
+    CONFIG_DEFAULT = "autoProcess.ini"
+    CONFIG_DIRECTORY = "./config"
+    RESOURCE_DIRECTORY = "./resources"
+    RELATIVE_TO_ROOT = "../"
+    ENV_CONFIG_VAR = "SMA_CONFIG"
+    DYNAMIC_SECTIONS = ["Audio.ChannelFilters", "Subtitle.Subliminal.Auth"]
 
-    migration2 = {
-        "Subtitle.Subliminal": {
-            "download-subs": "Subtitle",
-            "download-hearing-impaired-subs": "Subtitle",
-            "providers": "Subtitle.download-providers",
-        }
-    }
+    @property
+    def CONFIG_RELATIVEPATH(self):
+        return os.path.join(self.CONFIG_DIRECTORY, self.CONFIG_DEFAULT)
 
     def __init__(self, configFile=None, logger=None):
         self.log = logger or logging.getLogger(__name__)
@@ -535,13 +400,15 @@ class ReadSettings:
         if sys.version_info.major == 2:
             self.log.warning("Python 2 is no longer officially supported. Use with caution.")
 
-        defaultConfigFile = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../config/autoProcess.ini"))
-        oldConfigFile = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../autoProcess.ini"))
-        envConfigFile = os.environ.get("SMA_CONFIG")
+        rootpath = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), self.RELATIVE_TO_ROOT))
+
+        defaultConfigFile = os.path.normpath(os.path.join(rootpath, self.CONFIG_RELATIVEPATH))
+        oldConfigFile = os.path.normpath(os.path.join(rootpath, self.CONFIG_DEFAULT))
+        envConfigFile = os.environ.get(self.ENV_CONFIG_VAR)
 
         if envConfigFile and os.path.exists(os.path.realpath(envConfigFile)):
             configFile = os.path.realpath(envConfigFile)
-            self.log.debug("SMACONFIG environment variable override found.")
+            self.log.debug("%s environment variable override found." % (self.ENV_CONFIG_VAR))
         elif not configFile:
             if not os.path.exists(defaultConfigFile) and os.path.exists(oldConfigFile):
                 try:
@@ -556,13 +423,13 @@ class ReadSettings:
             self.log.debug("Loading default config file.")
 
         if os.path.isdir(configFile):
-            new = os.path.realpath(os.path.join(os.path.join(configFile, "config"), "autoProcess.ini"))
-            old = os.path.realpath(os.path.join(configFile, "autoProcess.ini"))
+            new = os.path.realpath(os.path.join(configFile, self.CONFIG_RELATIVEPATH))
+            old = os.path.realpath(os.path.join(configFile, self.CONFIG_DEFAULT))
             if not os.path.exists(new) and os.path.exists(old):
                 configFile = old
             else:
                 configFile = new
-            self.log.debug("ConfigFile specified is a directory, joining with autoProcess.ini.")
+            self.log.debug("Configuration file specified is a directory, joining with %s." % (self.CONFIG_DEFAULT))
 
         self.log.info("Loading config file %s." % configFile)
 
@@ -594,29 +461,38 @@ class ReadSettings:
 
         config = SMAConfigParser()
         if os.path.isfile(configFile):
-            config.read(configFile)
+            try:
+                config.read(configFile)
+            except:
+                self.log.exception("Error reading config file %s." % configFile)
+                sys.exit(1)
         else:
             self.log.error("Config file not found, creating %s." % configFile)
             # config.filename = filename
             write = True
 
-        config = self.migrateFromOld(config, configFile)
-
         # Make sure all sections and all keys for each section are present
-        for s in self.defaults:
+        for s in self.DEFAULTS:
             if not config.has_section(s):
                 config.add_section(s)
                 write = True
-            for k in self.defaults[s]:
+            if s in self.DYNAMIC_SECTIONS:
+                continue
+            for k in self.DEFAULTS[s]:
                 if not config.has_option(s, k):
-                    config.set(s, k, str(self.defaults[s][k]))
+                    config.set(s, k, str(self.DEFAULTS[s][k]))
                     write = True
 
         # If any keys are missing from the config file, write them
         if write:
             self.writeConfig(config, configFile)
 
+        config = self.migrateFromOld(config, configFile)
+
         self.readConfig(config)
+
+        self._cofig = config
+        self._configFile = configFile
 
     def readConfig(self, config):
         # Main converter settings
@@ -629,6 +505,7 @@ class ReadSettings:
         self.hwdevices = config.getdict(section, "hwdevices", lower=False, replace=[])
         self.hwoutputfmt = config.getdict(section, "hwaccel-output-format")
         self.output_dir = config.getdirectory(section, "output-directory")
+        self.output_dir_ratio = config.getfloat(section, "output-directory-space-ratio")
         self.output_format = config.get(section, "output-format")
         self.output_extension = config.getextension(section, "output-extension")
         self.temp_extension = config.getextension(section, "temp-extension")
@@ -637,7 +514,6 @@ class ReadSettings:
         self.copyto = config.getdirectories(section, "copy-to", separator='|')
         self.moveto = config.getdirectory(section, "move-to")
         self.delete = config.getboolean(section, "delete-original")
-        self.sort_streams = config.getboolean(section, "sort-streams")
         self.process_same_extensions = config.getboolean(section, "process-same-extensions")
         self.bypass_copy_all = config.getboolean(section, "bypass-if-copying-all")
         self.force_convert = config.getboolean(section, "force-convert")
@@ -660,8 +536,8 @@ class ReadSettings:
         try:
             self.permissions['chmod'] = int(self.permissions['chmod'], 8)
         except:
-            self.log.exception("Invalid permissions, defaulting to 644.")
-            self.permissions['chmod'] = int("0644", 8)
+            self.log.exception("Invalid permissions, defaulting to 664.")
+            self.permissions['chmod'] = int("0664", 8)
         self.permissions['uid'] = config.getint(section, 'uid', vars=os.environ)
         self.permissions['gid'] = config.getint(section, 'gid', vars=os.environ)
 
@@ -687,6 +563,7 @@ class ReadSettings:
                 self.log.error("Invalid download-artwork value, defaulting to 'poster'.")
         self.sanitize_disposition = config.getlist(section, "sanitize-disposition")
         self.strip_metadata = config.getboolean(section, "strip-metadata")
+        self.keep_titles = config.getboolean(section, "keep-titles")
 
         # Video
         section = "Video"
@@ -722,6 +599,7 @@ class ReadSettings:
         self.video_level = config.getfloat(section, "max-level")
         self.vprofile = config.getlist(section, "profile")
         self.pix_fmt = config.getlist(section, "pix-fmt")
+        self.keep_source_pix_fmt = config.getboolean(section, "prioritize-source-pix-fmt")
 
         # HDR
         section = "HDR"
@@ -742,40 +620,49 @@ class ReadSettings:
         self.acodec = config.getlist(section, "codec")
         self.awl = config.getlist(section, 'languages')
         self.adl = config.get(section, 'default-language').lower()
+        self.audio_original_language = config.getboolean(section, 'include-original-language')
         self.abitrate = config.getint(section, "channel-bitrate")
+        self.avbr = config.getint(section, "variable-bitrate")
         self.amaxbitrate = config.getint(section, 'max-bitrate')
         self.maxchannels = config.getint(section, 'max-channels')
-        self.prefer_more_channels = config.getboolean(section, "prefer-more-channels")
-        self.default_more_channels = config.getboolean(section, "default-more-channels")
+        self.aprofile = config.get(section, "profile").lower()
         self.afilter = config.get(section, "filter")
         self.aforcefilter = config.getboolean(section, 'force-filter')
         self.audio_samplerates = [int(x) for x in config.getlist(section, "sample-rates") if x.isdigit()]
+        self.audio_sampleformat = config.get(section, 'sample-format')
+        self.audio_atmos_force_copy = config.getboolean(section, 'atmos-force-copy')
         self.audio_copyoriginal = config.getboolean(section, "copy-original")
         self.audio_first_language_stream = config.getboolean(section, "first-stream-of-language")
-        self.allow_language_relax = config.getboolean(section, "allow-language-relax")
         self.aac_adtstoasc = config.getboolean(section, 'aac-adtstoasc')
-        self.ignore_truehd = config.getextensions(section, "ignore-truehd")
         self.ignored_audio_dispositions = config.getlist(section, "ignored-dispositions")
+        self.force_audio_defaults = config.getboolean(section, "force-default")
         self.unique_audio_dispositions = config.getboolean(section, "unique-dispositions")
+        self.stream_codec_combinations = sorted([x.split(":") for x in config.getlist(section, "stream-codec-combinations")], key=lambda x: len(x), reverse=True)
+
+        section = "Audio.Sorting"
+        self.audio_sorting = config.getlist(section, 'sorting')
+        self.audio_sorting_default = config.getlist(section, 'default-sorting')
+        self.audio_sorting_codecs = config.getlist(section, 'codecs')
 
         section = "Audio.ChannelFilters"
         self.afilterchannels = {}
         if config.has_section(section):
-            for key in config[section]:
-                try:
-                    channels = key.split("-", 1)
-                    channels = [int(x) for x in channels]
-                    self.afilterchannels[channels[0]] = {channels[1]: config.get(section, key)}
-                except:
-                    self.log.exception("Unable to parse %s %s, skipping." % (section, key))
-                    continue
+            for key, value in config.items(section):
+                if value:
+                    try:
+                        channels = [int(x) for x in key.split("-", 1)]
+                        self.afilterchannels[channels[0]] = {channels[1]: config.get(section, key)}
+                    except:
+                        self.log.exception("Unable to parse %s %s, skipping." % (section, key))
+                        continue
 
         # Universal Audio
         section = "Universal Audio"
         self.ua = config.getlist(section, "codec")
         self.ua_bitrate = config.getint(section, "channel-bitrate")
+        self.ua_vbr = config.getint(section, "variable-bitrate")
         self.ua_first_only = config.getboolean(section, "first-stream-only")
-        self.ua_last = config.getboolean(section, "move-after")
+        self.ua_profile = config.get(section, "profile").lower()
         self.ua_filter = config.get(section, "filter")
         self.ua_forcefilter = config.getboolean(section, 'force-filter')
 
@@ -785,6 +672,8 @@ class ReadSettings:
         self.scodec_image = config.getlist(section, 'codec-image-based')
         self.swl = config.getlist(section, 'languages')
         self.sdl = config.get(section, 'default-language').lower()
+        self.sforcedefault = config.getboolean(section, 'force-default')
+        self.subtitle_original_language = config.getboolean(section, 'include-original-language')
         self.sub_first_language_stream = config.getboolean(section, "first-stream-of-language")
         self.subencoding = config.get(section, 'encoding')
         self.burn_subtitles = config.getboolean(section, "burn-subtitles")
@@ -795,32 +684,49 @@ class ReadSettings:
         self.filename_dispositions = config.getlist(section, "filename-dispositions")
         self.ignore_embedded_subs = config.getboolean(section, 'ignore-embedded-subs')
         self.ignored_subtitle_dispositions = config.getlist(section, "ignored-dispositions")
+        self.force_subtitle_defaults = config.getboolean(section, "force-default")
         self.unique_subtitle_dispositions = config.getboolean(section, "unique-dispositions")
         self.attachmentcodec = config.getlist(section, 'attachment-codec')
+        self.removebvs = config.getlist(section, 'remove-bitstream-subs')
+        self.fix_sub_duration = config.getboolean(section, 'fix-sub-duration')
 
-        # Sublmininal
+        section = "Subtitle.Sorting"
+        self.sub_sorting = config.getlist(section, 'sorting')
+        self.sub_sorting_codecs = config.getlist(section, 'codecs')
+        self.burn_sorting = config.getlist(section, 'burn-sorting')
+
+        # CleanIt
+        section = "Subtitle.CleanIt"
+        self.cleanit = config.getboolean(section, "enabled")
+        self.cleanit_config = config.get(section, "config-path")
+        self.cleanit_tags = config.getlist(section, "tags")
+
+        # FFSubsync
+        section = "Subtitle.FFSubsync"
+        self.ffsubsync = config.getboolean(section, "enabled")
+
+        # Subliminal
         section = "Subtitle.Subliminal"
         self.downloadsubs = config.getboolean(section, "download-subs")
-        self.hearing_impaired = config.getboolean(section, 'download-hearing-impaired-subs')
+        self.downloadforcedsubs = config.getboolean(section, "download-forced-subs")
+        self.hearing_impaired = config.getboolean(section, "include-hearing-impaired-subs")
         self.subproviders = config.getlist(section, 'providers')
 
         # Subliminal Auth Information
         section = "Subtitle.Subliminal.Auth"
         self.subproviders_auth = {}
         if config.has_section(section):
-            for key in config[section]:
-                try:
-                    rawcredentials = config.get(section, key)
-                    credentials = rawcredentials.split(":", 1)
-                    if len(credentials) < 2:
-                        if rawcredentials:
+            for key, value in config.items(section, raw=True):
+                if value:
+                    try:
+                        credentials = [x.strip() for x in value.split(":", 1)]
+                        if len(credentials) < 2:
                             self.log.error("Unable to parse %s %s, skipping." % (section, key))
+                            continue
+                        self.subproviders_auth[key.strip()] = {'username': credentials[0], 'password': credentials[1]}
+                    except:
+                        self.log.exception("Unable to parse %s %s, skipping." % (section, key))
                         continue
-                    credentials = [x.strip() for x in credentials]
-                    self.subproviders_auth[key.strip()] = {'username': credentials[0], 'password': credentials[1]}
-                except:
-                    self.log.exception("Unable to parse %s %s, skipping." % (section, key))
-                    continue
 
         # Sonarr
         section = "Sonarr"
@@ -836,6 +742,7 @@ class ReadSettings:
             self.Sonarr['webroot'] = self.Sonarr['webroot'][:-1]
         self.Sonarr['rename'] = config.getboolean(section, "force-rename")
         self.Sonarr['rescan'] = config.getboolean(section, "rescan")
+        self.Sonarr['in-progress-check'] = config.getboolean(section, "in-progress-check")
         self.Sonarr['blockreprocess'] = config.getboolean(section, "block-reprocess")
 
         # Radarr
@@ -852,7 +759,25 @@ class ReadSettings:
             self.Radarr['webroot'] = self.Radarr['webroot'][:-1]
         self.Radarr['rename'] = config.getboolean(section, "force-rename")
         self.Radarr['rescan'] = config.getboolean(section, "rescan")
+        self.Radarr['in-progress-check'] = config.getboolean(section, "in-progress-check")
         self.Radarr['blockreprocess'] = config.getboolean(section, "block-reprocess")
+
+        # Whisparr
+        section = "Whisparr"
+        self.Whisparr = {}
+        self.Whisparr['host'] = config.get(section, "host")
+        self.Whisparr['port'] = config.getint(section, "port")
+        self.Whisparr['apikey'] = config.get(section, "apikey")
+        self.Whisparr['ssl'] = config.getboolean(section, "ssl")
+        self.Whisparr['webroot'] = config.get(section, "webroot")
+        if not self.Whisparr['webroot'].startswith("/"):
+            self.Whisparr['webroot'] = "/" + self.Whisparr['webroot']
+        if self.Whisparr['webroot'].endswith("/"):
+            self.Whisparr['webroot'] = self.Whisparr['webroot'][:-1]
+        self.Whisparr['rename'] = config.getboolean(section, "force-rename")
+        self.Whisparr['rescan'] = config.getboolean(section, "rescan")
+        self.Whisparr['in-progress-check'] = config.getboolean(section, "in-progress-check")
+        self.Whisparr['blockreprocess'] = config.getboolean(section, "block-reprocess")
 
         # Sickbeard
         section = "Sickbeard"
@@ -876,62 +801,48 @@ class ReadSettings:
         self.Sickrage['user'] = config.get(section, "username")
         self.Sickrage['pass'] = config.get(section, "password")
 
-        # Read relevant CouchPotato section information
-        section = "CouchPotato"
-        self.CP = {}
-        self.CP['host'] = config.get(section, "host")
-        self.CP['port'] = config.getint(section, "port")
-        self.CP['username'] = config.get(section, "username")
-        self.CP['password'] = config.get(section, "password")
-        self.CP['apikey'] = config.get(section, "apikey")
-        self.CP['delay'] = config.getfloat(section, "delay")
-        self.CP['method'] = config.get(section, "method")
-        self.CP['webroot'] = config.get(section, "webroot")
-        self.CP['delete_failed'] = config.getboolean(section, "delete-failed")
-        self.CP['ssl'] = config.getboolean(section, 'ssl')
-
         # SAB
         section = "SABNZBD"
         self.SAB = {}
         self.SAB['convert'] = config.getboolean(section, "convert")
-        self.SAB['cp'] = config.get(section, "Couchpotato-category").lower()
         self.SAB['sb'] = config.get(section, "Sickbeard-category").lower()
         self.SAB['sr'] = config.get(section, "Sickrage-category").lower()
         self.SAB['sonarr'] = config.get(section, "Sonarr-category").lower()
         self.SAB['radarr'] = config.get(section, "Radarr-category").lower()
-        self.SAB['bypass'] = config.get(section, "Bypass-category").lower()
-        self.SAB['output_dir'] = config.getdirectory(section, "output-directory")
+        self.SAB['whisparr'] = config.get(section, "Whisparr-category").lower()
+        self.SAB['bypass'] = config.getlist(section, "Bypass-category")
+        self.SAB['output-dir'] = config.getdirectory(section, "output-directory")
         self.SAB['path-mapping'] = config.getdict(section, "path-mapping", dictseparator="=", lower=False, replace=[])
 
         # Deluge
         section = "Deluge"
         self.deluge = {}
-        self.deluge['cp'] = config.get(section, "couchpotato-label").lower()
         self.deluge['sb'] = config.get(section, "sickbeard-label").lower()
         self.deluge['sr'] = config.get(section, "sickrage-label").lower()
         self.deluge['sonarr'] = config.get(section, "sonarr-label").lower()
         self.deluge['radarr'] = config.get(section, "radarr-label").lower()
-        self.deluge['bypass'] = config.get(section, "bypass-label").lower()
+        self.deluge['whisparr'] = config.get(section, "whisparr-label").lower()
+        self.deluge['bypass'] = config.getlist(section, "bypass-label")
         self.deluge['convert'] = config.getboolean(section, "convert")
         self.deluge['host'] = config.get(section, "host")
         self.deluge['port'] = config.getint(section, "port")
         self.deluge['user'] = config.get(section, "username")
         self.deluge['pass'] = config.get(section, "password")
-        self.deluge['output_dir'] = config.getdirectory(section, "output-directory")
+        self.deluge['output-dir'] = config.getdirectory(section, "output-directory")
         self.deluge['remove'] = config.getboolean(section, "remove")
         self.deluge['path-mapping'] = config.getdict(section, "path-mapping", dictseparator="=", lower=False, replace=[])
 
         # qBittorrent
         section = "qBittorrent"
         self.qBittorrent = {}
-        self.qBittorrent['cp'] = config.get(section, "couchpotato-label").lower()
         self.qBittorrent['sb'] = config.get(section, "sickbeard-label").lower()
         self.qBittorrent['sr'] = config.get(section, "sickrage-label").lower()
         self.qBittorrent['sonarr'] = config.get(section, "sonarr-label").lower()
         self.qBittorrent['radarr'] = config.get(section, "radarr-label").lower()
-        self.qBittorrent['bypass'] = config.get(section, "bypass-label").lower()
+        self.qBittorrent['whisparr'] = config.get(section, "whisparr-label").lower()
+        self.qBittorrent['bypass'] = config.getlist(section, "bypass-label")
         self.qBittorrent['convert'] = config.getboolean(section, "convert")
-        self.qBittorrent['output_dir'] = config.getdirectory(section, "output-directory")
+        self.qBittorrent['output-dir'] = config.getdirectory(section, "output-directory")
         self.qBittorrent['actionbefore'] = config.get(section, "action-before")
         self.qBittorrent['actionafter'] = config.get(section, "action-after")
         self.qBittorrent['host'] = config.get(section, "host")
@@ -944,14 +855,14 @@ class ReadSettings:
         # Read relevant uTorrent section information
         section = "uTorrent"
         self.uTorrent = {}
-        self.uTorrent['cp'] = config.get(section, "couchpotato-label").lower()
         self.uTorrent['sb'] = config.get(section, "sickbeard-label").lower()
         self.uTorrent['sr'] = config.get(section, "sickrage-label").lower()
         self.uTorrent['sonarr'] = config.get(section, "sonarr-label").lower()
         self.uTorrent['radarr'] = config.get(section, "radarr-label").lower()
-        self.uTorrent['bypass'] = config.get(section, "bypass-label").lower()
+        self.uTorrent['whisparr'] = config.get(section, "whisparr-label").lower()
+        self.uTorrent['bypass'] = config.getlist(section, "bypass-label")
         self.uTorrent['convert'] = config.getboolean(section, "convert")
-        self.uTorrent['output_dir'] = config.getdirectory(section, "output-directory")
+        self.uTorrent['output-dir'] = config.getdirectory(section, "output-directory")
         self.uTorrent['webui'] = config.getboolean(section, "webui")
         self.uTorrent['actionbefore'] = config.get(section, "action-before")
         self.uTorrent['actionafter'] = config.get(section, "action-after")
@@ -965,10 +876,16 @@ class ReadSettings:
         # Plex
         section = "Plex"
         self.Plex = {}
+        self.Plex['username'] = config.get(section, "username")
+        self.Plex['password'] = config.get(section, "password")
+        self.Plex['servername'] = config.get(section, "servername")
         self.Plex['host'] = config.get(section, "host")
         self.Plex['port'] = config.getint(section, "port")
         self.Plex['refresh'] = config.getboolean(section, "refresh")
         self.Plex['token'] = config.get(section, "token")
+        self.Plex['ssl'] = config.getboolean(section, "ssl")
+        self.Plex['ignore-certs'] = config.getboolean(section, 'ignore-certs')
+        self.Plex['path-mapping'] = config.getdict(section, "path-mapping", dictseparator="=", lower=False, replace=[])
 
     def writeConfig(self, config, cfgfile):
         if not os.path.isdir(os.path.dirname(cfgfile)):
@@ -977,116 +894,75 @@ class ReadSettings:
             fp = open(cfgfile, "w")
             config.write(fp)
             fp.close()
-        except IOError:
-            self.log.exception("Error writing to autoProcess.ini.")
-        except PermissionError:
-            self.log.exception("Error writing to autoProcess.ini due to permissions.")
+        except (OSError, PermissionError, IOError):
+            self.log.exception("Error writing to %s due to permissions." % (self.CONFIG_DEFAULT))
 
     def migrateFromOld(self, config, configFile):
-        if config.has_section("MP4"):
-            self.log.info("Old configuration file format found, attempting to migrate to new format.")
-            backup = configFile + ".backup"
-            i = 2
-            while os.path.exists(backup):
-                backup = configFile + "." + str(i) + ".backup"
-                i += 1
-            import shutil
-            shutil.copy(configFile, backup)
-            self.log.info("Old configuration file backed up to %s" % backup)
-
-            open(configFile, 'w').close()
-            new = {}
-
-            self.log.info("Begining Conversion")
-            self.log.info("==========================")
-            for section in config.sections():
-                for (key, val) in config.items(section, raw=True):
-                    try:
-                        newsection, newkey = self.migration[section][key].split(".", 1)
-                    except:
-                        self.log.error("%s.%s >> No destination" % (section, key))
-                        continue
-
-                    if newsection not in new:
-                        new[newsection] = {}
-                        self.log.debug("%s section created" % newsection)
-                    default = self.defaults[newsection][newkey]
-                    if section in ['uTorrent', 'qBittorrent'] and key == 'host':
-                        try:
-                            ssl = ('https' in val)
-                            val = val.replace("https://", "").replace("http://", "").replace("/", "")
-                            val, port = val.split(':', 1)
-                            new[newsection]['port'] = int(port)
-                            new[newsection]['ssl'] = ssl
-                            self.log.info("%s.%s >> %s.%s | %s (%s)" % (section, key, newsection, "port", port, type(port).__name__))
-                            self.log.info("%s.%s >> %s.%s | %s (%s)" % (section, key, newsection, "ssl", ssl, type(ssl).__name__))
-                        except:
-                            val = self.defaults[newsection][newkey]
-                    elif section == 'MP4' and key == 'ios-audio':
-                        if val.lower() in ['true', 't', 'yes']:
-                            val = self.defaults[newsection][newkey]
-                        elif val.lower() in ['false', 'f', 'no']:
-                            val = ''
-                    elif key == 'ignore-truehd':
-                        if val.lower() in ['true', 't', 'yes']:
-                            val = self.defaults[newsection][newkey]
-                        else:
-                            val = ''
-                    elif not isinstance(val, type(default)) and '%' not in val:
-                        try:
-                            if isinstance(default, bool):
-                                val = (val.lower() in ['true', 't', 'yes'])
-                            elif isinstance(default, float):
-                                val = float(val)
-                            elif isinstance(default, int):
-                                val = int(val)
-                        except:
-                            self.log.error("** %s.%s unable to convert %s (%s) to type %s, using default value %s" % (section, key, val, type(val).__name__, type(default).__name__, self.defaults[newsection][newkey]))
-                            val = self.defaults[newsection][newkey]
-
-                    self.log.info("%s.%s >> %s.%s | %s (%s)" % (section, key, newsection, newkey, val, type(val).__name__))
-                    new[newsection][newkey] = val
-
-            newconfig = SMAConfigParser()
-            for s in new:
-                if not newconfig.has_section(s):
-                    newconfig.add_section(s)
-                    write = True
-                for k in new[s]:
-                    if not newconfig.has_option(s, k):
-                        newconfig.set(s, k, str(new[s][k]))
-            self.writeConfig(newconfig, configFile)
-            return newconfig
-        else:
+        try:
             write = False
-            for k in self.migration2:
-                s = self.migration2[k]
-                for sk in s:
-                    try:
-                        skval = s[sk]
-                        if skval:
-                            skval = skval.split(".", 1)
-                        if len(skval) > 1:
-                            if config.has_section(skval[0]) and config.has_option(skval[0], skval[1]):
-                                old = config.get(skval[0], skval[1])
-                                self.log.info("Found old value %s for %s.%s, migrating to new location %s.%s" % (old, skval[0], skval[1], k, sk))
-                                if not config.has_section(k):
-                                    config.add_section(k)
-                                config[k][sk] = old
-                                del config[skval[0]][skval[1]]
-                                write = True
-                        else:
-                            if config.has_section(skval[0]) and config.has_option(skval[0], sk):
-                                old = config.get(skval[0], sk)
-                                self.log.info("Found old value %s for %s.%s, migrating to new location %s.%s" % (old, skval[0], sk, k, sk))
-                                if not config.has_section(k):
-                                    config.add_section(k)
-                                config[k][sk] = old
-                                del config[skval[0]][sk]
-                                write = True
-                    except:
-                        self.log.exception("Error migrating configuration.")
-                        continue
+            if config.has_option("Converter", "sort-streams"):
+                if not config.getboolean("Converter", "sort-streams"):
+                    config.remove_option("Converter", "sort-streams")
+                    config.set("Audio.Sorting", "sorting", "")
+                    config.set("Subtitle.Sorting", "sorting", "")
+                    write = True
+            elif config.has_option("Audio", "prefer-more-channels"):
+                asorting = config.get("Audio.Sorting", 'sorting').lower()
+                if config.getboolean("Audio", "prefer-more-channels"):
+                    if "channels" in asorting and "channels.a" not in asorting and "channels.d" not in asorting:
+                        asorting = asorting.replace("channels", "channels.d")
+                        self.log.debug("Replacing channels with channels.d based on deprecated settings [prefer-more-channels: True].")
+                    else:
+                        asorting = asorting.replace("channels.a", "channels.d")
+                        self.log.debug("Replacing channels.a with channels.d based on deprecated settings [prefer-more-channels: True].")
+                else:
+                    asorting = asorting.replace("channels.d", "channels.a")
+                    self.log.debug("Replacing channels.d with channels.a based on deprecated settings [prefer-more-channels: False].")
+                config.remove_option("Audio", "prefer-more-channels")
+                config.set("Audio.Sorting", "sorting", asorting)
+                write = True
+
+            if config.has_option("Audio", "default-more-channels"):
+                adsorting = config.get("Audio.Sorting", 'default-sorting').lower()
+                if config.getboolean("Audio", "default-more-channels"):
+                    if "channels" in adsorting and "channels.a" not in adsorting and "channels.d" not in adsorting:
+                        adsorting = adsorting.replace("channels", "channels.d")
+                        self.log.debug("Replacing channels with channels.d based on deprecated settings [default-more-channels: True].")
+                    else:
+                        adsorting = adsorting.replace("channels.a", "channels.d")
+                        self.log.debug("Replacing channels.a with channels.d based on deprecated settings [default-more-channels: True].")
+                else:
+                    adsorting = adsorting.replace("channels.d", "channels.a")
+                    self.log.debug("Replacing channels.d with channels.a based on deprecated settings [default-more-channels: False].")
+                config.remove_option("Audio", "default-more-channels")
+                config.set("Audio.Sorting", "default-sorting", adsorting)
+                write = True
+
+            if config.has_option("Audio.Sorting", "final-sort") and config.has_option("Audio.Sorting", "sorting") and config.getboolean("Audio.Sorting", "final-sort"):
+                config.remove_option("Audio.Sorting", "final-sort")
+                asort = config.getlist("Audio.Sorting", "sorting")
+                if "map" not in asort:
+                    asort.append("map")
+                    config.set("Audio.Sorting", "sorting", "".join("%s, " % x for x in asort)[:-2])
+                    self.log.debug("Final-sort is deprecated, adding to sorting list [audio.sorting-final-sort: True].")
+                else:
+                    self.log.debug("Final-sort is deprecated, removing [audio.sorting-final-sort: True].")
+                write = True
+            elif config.has_option("Audio.Sorting", "final-sort"):
+                config.remove_option("Audio.Sorting", "final-sort")
+                self.log.debug("Final-sort is deprecated, removing [audio.sorting-final-sort: False].")
+                write = True
+
+            if config.has_option("Audio", "copy-original-before"):
+                config.remove_option("Audio", "copy-original-before")
+                write = True
+
+            if config.has_option("Universal Audio", "move-after"):
+                config.remove_option("Universal Audio", "move-after")
+                write = True
+
             if write:
                 self.writeConfig(config, configFile)
+        except:
+            self.log.exception("Unable to migrate old sorting options.")
         return config

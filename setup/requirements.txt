@@ -9,4 +9,5 @@ subliminal
 python-dateutil
 stevedore
 qtfaststart
-pymediainfo
+cleanit
+plexapi

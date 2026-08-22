@@ -14,7 +14,6 @@ Integration
 - [Radarr](#radarr-setup)
 - [Sickbeard](#sickbeard-setup)
 - [SickRage](#sickrage-setup)
-- [CouchPotato](#couchpotato-setup)
 
 ### Downloaders Supported
 - [NZBGet](#nzbget-setup)
@@ -25,7 +24,7 @@ Integration
 
 Dependencies
 --------------
-- [Python 3](https://www.python.org/) (Python 2.7 unofficially supported)
+- [Python 3](https://www.python.org/)
 - [FFmpeg](https://ffmpeg.org/)
 - [Python Packages](https://github.com/mdhiggins/sickbeard_mp4_automator/wiki/Dependencies)
 
@@ -45,10 +44,11 @@ Two official Docker containers are maintained for Radarr and Sonarr with SMA inc
 General Configuration
 --------------
 1. Download or compile FFmpeg 
-2. Rename autoProcess.ini.sample to autoProcess.ini inside your `config` directory (or attempt to run the script which will generate a new config file if absent)
-3. Set the [configuration options](https://github.com/mdhiggins/sickbeard_mp4_automator/wiki/autoProcess-Settings) to your desired output and include the path of your new FFmpeg / FFprobe binaries
-4. Run [manual.py](#manual-script-usage) and test out a conversion
-5. Configure direct integration using the instructions below
+2. Install [requirements/dependencies](#dependencies)
+3. Rename `setup\autoProcess.ini.sample` to `autoProcess.ini` and place inside your `config` directory (or attempt to run the script which will generate a new config file if absent)
+4. Set the [configuration options](https://github.com/mdhiggins/sickbeard_mp4_automator/wiki/autoProcess-Settings) to your desired output and include the path of your new FFmpeg / FFprobe binaries
+5. Run [manual.py](#manual-script-usage) and test out a conversion
+6. Configure direct integration using the instructions below
 
 Sonarr Setup
 --------------
@@ -57,9 +57,12 @@ Sonarr Setup
 3. Setup the postSonarr.py script via Settings > Connect > Connections > + (Add)
     - `name` - postSonarr
     - `On Grab` - No
-    - `On Download` - Yes
+    - `On Download` \ `On Import` - Yes
     - `On Upgrade` - Yes
     - `On Rename` - No
+    - `On Movie Delete` - No
+    - `On Movie File Delete` - No
+    - `On Health Issue` - No
     - `Path` - Full path to your python executable
     - `Arguments` - Full path to `postSonarr.py`
     - For Sonarr V3 you'll need to make a .sh or .bat file to combine your path to python and script
@@ -72,9 +75,12 @@ Radarr Setup
 3. Setup the postRadarr.py script via Settings > Connect > Connections > + (Add)
     - `name` - postRadarr
     - `On Grab` - No
-    - `On Download` - Yes
+    - `On Download` \ `On Import` - Yes
     - `On Upgrade` - Yes
     - `On Rename` - No
+    - `On Movie Delete` - No
+    - `On Movie File Delete` - No
+    - `On Health Issue` - No
     - `Path` - Full path to your python executable
     - `Arguments` - Full path to `postRadarr.py`
     - For Radarr V3 you'll need to make a .sh or .bat file to combine your path to python and script
@@ -95,26 +101,6 @@ SickRage Setup
     - `/usr/bin/python /home/user/sickbeard_mp4_automator/postSickbeard.py`
 2. Set the [Sickrage settings](https://github.com/mdhiggins/sickbeard_mp4_automator/wiki/autoProcess-Settings#sickrage) in autoProcess.ini
 
-CouchPotato Setup
---------------
-1. Set your [CouchPotato settings](https://github.com/mdhiggins/sickbeard_mp4_automator/wiki/autoProcess-Settings#couchpotato) in autoProcess.ini
-2. Edit `main.py` in the `setup\PostProcess` folder
-    - Set the path variable to the script location
-    - By default it points to `C:\\Scripts\\`
-    - Use double backslahses
-2. Copy the PostProcess directory from the setup folder included with this script to the CouchPotato `custom_plugins` directory
-    - Navigate to the About page in CouchPotato, where the installation directory is displayed.
-    - Go to this folder and copy the PostProcess folder (the whole folder, not just the contents) to the CouchPotato `custom_plugins` directory
-    - Delete any `.pyc` files you find.
-    - Restart CouchPotato
-    - Verify in CouchPotato logs that PostProcess was loaded.
-3. If you're using one of the post download scripts ([SAB|NZBGet|uTorrent|deluge]PostProcess.py), disable automatic checking of the renamer folder, the script will automatically notify CouchPotato when it is complete to check for new videos to be renamed and relocated. Leaving this on may cause conflicts and CouchPotato may try to relocate/rename the file before processing is completed.
-    - Set `Run Every` to `0`
-    - Set `Force Every` to `0`
-    - If you aren't using one of these scripts and are using an unsupported downloader, you will need to have CouchPotato periodically check the folder for files, otherwise the post downloader scripts will manually trigger a renamer scan. Using manual triggers is helpful because it prevents a coincidental renamer scan during other processing events.
-4. Configure Downloaders
-    - In `Settings > Downloaders` configure your labels or categories to match what you have configured in your respective downloader.
-
 NZBGet Setup
 --------------
 1. Copy the script NZBGetPostProcess.py to NZBGet's script folder.
@@ -127,7 +113,6 @@ NZBGet Setup
     - Select `NZBGETPOSTPROCESS` option at the bottom of the left hand navigation panel and configure the options
         - `MP4_FOLDER` - default `~/sickbeard_mp4_automator/` - Location of the script. Use full path with trailing backslash.
         - `SHOULDCONVERT` - `True`/`False` - Convert file before passing to destination
-        - `CP_CAT` - default `couchpotato` - category of downloads that will be passed to CouchPotato
         - `SONARR_CAT` - default `sonarr` - category of downloads that will be passed to Sonarr
         - `SICKBEARD_CAT` - default `sickbeard` - category of downloads that will be passed to Sickbeard
         - `SICKRAGE_CAT` - default `sickrage` - category of downloads that will be passed to Sickrage
@@ -148,7 +133,6 @@ SABNZBD Setup
     - Configure `name` to match the settings from the `SABNZBD` section of `autoProcess.ini`
         - Default `sickbeard`
         - Default `sickrage`
-        - Default `couchpotato`
         - Default `sonarr`
         - Default `bypass`
     - Select the SABPostProcess.py script
@@ -168,6 +152,7 @@ Deluge Daemon Setup
         - Ex: `sampleuser:samplepass:10`
 2. Start/Restart deluged
     - *deluged* not <i>deluge</i>
+    - If you're running Deluge on Windows and not setting up the daemon as a service, you can trigger the daemon to run in the background by disabling *Classic Mode* in your Deluge preferences under the *Interface* section
 3. Access the WebUI
     - Default port is `8112`
     - Default password is `deluge`
@@ -219,17 +204,7 @@ If for some reason you need to override the path to autoProcess.ini (for virtual
 
 Post Process Scripts
 --------------
-The script suite supports the ability to write your own post processing scripts that will be executed when all the final processing has been completed. All scripts in the `./post_process` directory will be executed if the `post-process` option is set to `True` in `autoProcess.ini`. Scripts within the `./post_process/resources` directory are protected from execution if additional script resources are required.
-
-The following environmental variables are available for usage:
-- `SMA_FILES` - JSON Array of all files created by the post processing script. The first file in the array is the primary file, and any additional files are copies created by the copy-to option
-- `SMA_TVDBID` - TVDB ID if file processed was a TV show and this information is available
-- `SMA_SEASON` - Season number if file processed was a TV show
-- `SMA_EPISODE` - Episode number if files processed was a TV show
-- `SMA_IMDBID` - IMDB ID if file processed was a movie
-A sample script as well as an OS X 'Add to iTunes' script (`iTunes.py`) have been provided.
-
-*Special thanks to @jzucker2 for providing much of the initial code for this feature*
+- See https://github.com/mdhiggins/sickbeard_mp4_automator/blob/master/post_process/post_process.md
 
 Manual Script Usage
 --------------
@@ -271,6 +246,7 @@ optional arguments:
                         options that come from output_dir and move-to
   -nt, --notag          Overrides and disables tagging when using the
                         automated option
+  -to, --tagonly        Only tag without conversion
   -nd, --nodelete       Overrides and disables deleting of original files
   -pr, --preserverelative
                         Preserves relative directories when processing
@@ -283,6 +259,8 @@ optional arguments:
                         also enables process-same-extenions if true forcing the conversion of files
   -oo, --optionsonly    Display generated conversion options only, do not perform conversion
   -cl, --codeclist      Print a list of supported codecs and their paired FFMPEG encoders
+  -pa, --processedarchive
+                        Specify a processed list/archive so already processed files are skipped
 ```
 
 Examples
@@ -339,7 +317,6 @@ This project makes use of, integrates with, or was inspired by the following pro
 - http://www.ffmpeg.org/
 - http://www.python.org/
 - http://www.sickbeard.com/
-- http://couchpota.to/
 - http://sabnzbd.org/
 - https://nzbget.net/
 - https://www.deluge-torrent.org/
@@ -352,6 +329,6 @@ This project makes use of, integrates with, or was inspired by the following pro
 - http://github.com/Diaoul/subliminal
 - http://sonarr.tv/
 - http://radarr.video/
-
+- https://github.com/ratoaq2/cleanit
 
 ## Enjoy

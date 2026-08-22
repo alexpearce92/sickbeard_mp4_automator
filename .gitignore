@@ -8,7 +8,11 @@ update.py
 *.sh
 *.bat
 *.backup*
+*.venv.py
+*.json
 config/custom.py
+post_process/*
+!post_process/post_process.md
 
 #################
 ## Eclipse
@@ -205,6 +209,7 @@ $RECYCLE.BIN/
 # Packages
 *.egg
 *.egg-info
+.venv/
 venv/
 env/
 dist/

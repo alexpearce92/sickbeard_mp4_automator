@@ -2,17 +2,15 @@ import os
 import sys
 import requests
 import enum
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
 import tempfile
 import time
 import logging
 import tmdbsimple as tmdb
+from io import StringIO
 from mutagen.mp4 import MP4, MP4Cover, MP4StreamInfoError
 from resources.extensions import valid_poster_extensions, tmdb_api_key
-from resources.lang import getAlpha2BCode
+from resources.lang import getAlpha2BCode, getAlpha3TCode
+from converter.ffmpeg import FFMpegConvertError
 
 
 class TMDBIDError(Exception):
@@ -45,14 +43,23 @@ class Metadata:
     HD = None
 
     def __init__(self, mediatype, tmdbid=None, imdbid=None, tvdbid=None, season=None, episode=None, original=None, language=None, logger=None):
+        self.tmdbid = None
+        self.tvdbid = None
+        self.imdbid = None
+        self.season = None
+        self.episode = None
+        self.original_language = None
+
         tmdb.API_KEY = tmdb_api_key
+        tmdb.REQUESTS_TIMEOUT = 30
         self.log = logger or logging.getLogger(__name__)
 
+        self.log.debug("Input IDs:")
         self.log.debug("TMDBID: %s" % tmdbid)
         self.log.debug("IMDBID: %s" % imdbid)
         self.log.debug("TVDBID: %s" % tvdbid)
 
-        self.tmdbid = self.resolveTmdbID(mediatype, tmdbid=tmdbid, tvdbid=tvdbid, imdbid=imdbid)
+        self.tmdbid = Metadata.resolveTmdbID(mediatype, self.log, tmdbid=tmdbid, tvdbid=tvdbid, imdbid=imdbid)
         self.log.debug("Using TMDB ID: %s" % self.tmdbid)
 
         if not self.tmdbid:
@@ -67,21 +74,26 @@ class Metadata:
         if self.mediatype == MediaType.Movie:
             query = tmdb.Movies(self.tmdbid)
             self.moviedata = query.info(language=self.language)
+            self.externalids = query.external_ids(language=self.language)
             self.credit = query.credits()
             try:
                 releases = query.release_dates()
                 release = next(x for x in releases['results'] if x['iso_3166_1'] == 'US')
                 rating = release['release_dates'][0]['certification']
                 self.rating = self.getRating(rating)
+            except KeyboardInterrupt:
+                raise
             except:
-                self.log.error("Unable to retrieve rating.")
+                self.log.exception("Unable to retrieve rating.")
                 self.rating = None
 
+            self.original_language = getAlpha3TCode(self.moviedata['original_language'])
             self.title = self.moviedata['title']
             self.genre = self.moviedata['genres']
             self.tagline = self.moviedata['tagline']
             self.description = self.moviedata['overview']
             self.date = self.moviedata['release_date']
+            self.imdbid = self.externalids.get('imdb_id') or imdbid
         elif self.mediatype == MediaType.TV:
             self.season = int(season)
             self.episode = int(episode)
@@ -94,31 +106,36 @@ class Metadata:
             self.seasondata = seasonquery.info(language=self.language)
             self.episodedata = episodequery.info(language=self.language)
             self.credit = episodequery.credits()
-
+            self.externalids = seriesquery.external_ids(language=self.language)
             try:
                 content_ratings = seriesquery.content_ratings()
                 rating = next(x for x in content_ratings['results'] if x['iso_3166_1'] == 'US')['rating']
                 self.rating = self.getRating(rating)
+            except KeyboardInterrupt:
+                raise
             except:
                 self.log.error("Unable to retrieve rating.")
                 self.rating = None
 
+            self.original_language = getAlpha3TCode(self.showdata['original_language'])
             self.showname = self.showdata['name']
             self.genre = self.showdata['genres']
             self.network = self.showdata['networks']
             self.title = self.episodedata['name'] or "Episode %d" % (episode)
             self.description = self.episodedata['overview']
-            self.airdate = self.episodedata['air_date']
+            self.date = self.episodedata['air_date']
+            self.imdbid = self.externalids.get('imdb_id') or imdbid
+            self.tvdbid = self.externalids.get('tvdb_id') or tvdbid
 
-    def resolveTmdbID(self, mediatype, tmdbid=None, tvdbid=None, imdbid=None):
+    @staticmethod
+    def resolveTmdbID(mediatype, log, tmdbid=None, tvdbid=None, imdbid=None):
         find = None
 
         if tmdbid:
             try:
                 return int(tmdbid)
-            except:
-                self.log.error("Invalid TMDB ID provided.")
-                pass
+            except ValueError:
+                log.error("Invalid TMDB ID provided.")
 
         if mediatype == MediaType.Movie:
             if imdbid:
@@ -141,7 +158,27 @@ class Metadata:
                     tmdbid = find.tv_results[0].get('id')
         return tmdbid
 
-    def writeTags(self, path, converter, artwork=True, thumbnail=False, width=None, height=None):
+    @staticmethod
+    def getDefaultLanguage(tmdbid, mediatype):
+        if mediatype not in [MediaType.TV, MediaType.Movie]:
+            return None
+
+        if not tmdbid:
+            return None
+
+        tmdb.API_KEY = tmdb_api_key
+        if mediatype == MediaType.Movie:
+            query = tmdb.Movies(tmdbid)
+        elif mediatype == MediaType.TV:
+            query = tmdb.TV(tmdbid)
+
+        if query:
+            info = query.info()
+            return getAlpha3TCode(info['original_language'])
+
+        return None
+
+    def writeTags(self, path, inputfile, converter, artwork=True, thumbnail=False, width=None, height=None, cues_to_front=False):
         self.log.info("Tagging file: %s." % path)
         if width and height:
             try:
@@ -151,7 +188,7 @@ class Metadata:
 
         try:
             video = MP4(path)
-        except MP4StreamInfoError:
+        except (MP4StreamInfoError, KeyError):
             self.log.debug('File is not a valid MP4 file and cannot be tagged using mutagen, falling back to FFMPEG limited tagging.')
             try:
                 metadata = {}
@@ -163,8 +200,8 @@ class Metadata:
                 elif self.mediatype == MediaType.TV:
                     metadata['TITLE'] = self.title  # Video title
                     metadata["COMMENT"] = self.description  # Long description
-                    metadata["DATE_RELEASE"] = self.airdate  # Air Date
-                    metadata["DATE"] = self.airdate  # Air Date
+                    metadata["DATE_RELEASE"] = self.date  # Air Date
+                    metadata["DATE"] = self.date  # Air Date
                     metadata["ALBUM"] = self.showname + ", Season " + str(self.season)  # Album as Season
 
                 if self.genre and len(self.genre) > 0:
@@ -174,10 +211,12 @@ class Metadata:
 
                 coverpath = None
                 if artwork:
-                    coverpath = self.getArtwork(path, thumbnail=thumbnail)
+                    coverpath = self.getArtwork(path, inputfile, thumbnail=thumbnail)
 
                 try:
-                    conv = converter.tag(path, metadata, coverpath)
+                    conv = converter.tag(path, metadata, coverpath, cues_to_front=cues_to_front)
+                except KeyboardInterrupt:
+                    raise
                 except:
                     self.log.exception("FFMPEG Tag Error.")
                     return False
@@ -188,12 +227,20 @@ class Metadata:
                     self.log.debug(debug)
                 self.log.info("Tags written successfully using FFMPEG fallback method.")
                 return True
+            except KeyboardInterrupt:
+                raise
+            except FFMpegConvertError as e:
+                self.log.exception("Error tagging file using FFMPEG fallback method, FFMPEG error.")
+                self.log.error(e.cmd)
+                self.log.error(e.output)
             except:
                 self.log.exception("Unexpected tagging error using FFMPEG fallback method.")
                 return False
 
         try:
             video.delete()
+        except KeyboardInterrupt:
+            raise
         except:
             self.log.debug("Unable to clear original tags, will proceed.")
 
@@ -211,7 +258,7 @@ class Metadata:
             video["ldes"] = self.description  # Long description
             network = [x['name'] for x in self.network]
             video["tvnn"] = network  # Network
-            video["\xa9day"] = self.airdate  # Airdate
+            video["\xa9day"] = self.date  # Air Date
             video["tvsn"] = [self.season]  # Season number
             video["disk"] = [(self.season, 0)]  # Season number as disk
             video["\xa9alb"] = self.showname + ", Season " + str(self.season)  # iTunes Album as Season
@@ -228,7 +275,7 @@ class Metadata:
             video["----:com.apple.iTunes:iTunEXTC"] = self.rating.encode("UTF-8", errors="ignore")  # iTunes content rating
 
         if artwork:
-            coverpath = self.getArtwork(path, thumbnail=thumbnail)
+            coverpath = self.getArtwork(path, inputfile, thumbnail=thumbnail)
             if coverpath is not None:
                 cover = open(coverpath, 'rb').read()
                 if coverpath.endswith('png'):
@@ -246,6 +293,8 @@ class Metadata:
             video.save()
             self.log.info("Tags written successfully using mutagen.")
             return True
+        except KeyboardInterrupt:
+            raise
         except:
             self.log.exception("There was an error writing the tags.")
         return False
@@ -324,15 +373,19 @@ class Metadata:
             f.write(requests.get(url, allow_redirects=True, timeout=30).content)
         return (fn, f)
 
-    def getArtwork(self, path, thumbnail=False):
+    def getArtwork(self, path, inputfile, thumbnail=False):
         # Check for artwork in the same directory as the source
         poster = None
-        base, ext = os.path.splitext(path)
-        for e in valid_poster_extensions:
-            path = base + os.extsep + e
-            if (os.path.exists(path)):
-                poster = path
-                self.log.info("Local artwork detected, using %s." % path)
+        base, _ = os.path.splitext(inputfile)
+        base2, _ = os.path.splitext(path)
+        for b in [base, base2]:
+            for e in valid_poster_extensions:
+                path = b + os.extsep + e
+                if (os.path.exists(path)):
+                    poster = path
+                    self.log.info("Local artwork detected, using %s." % path)
+                    break
+            if poster:
                 break
 
         if not poster:
@@ -355,8 +408,11 @@ class Metadata:
                 else:
                     poster_path = self.seasondata.get('poster_path')
 
+                if not poster_path:
+                    poster_path = self.showdata.get('poster_path')
+
             if not poster_path:
-                self.log.warning("No artwork found for media file.")
+                self.log.debug("No artwork found for media file.")
                 return None
 
             savepath = os.path.join(tempfile.gettempdir(), "poster-%s.jpg" % (self.tmdbid))
@@ -365,6 +421,8 @@ class Metadata:
             if os.path.exists(savepath):
                 try:
                     os.remove(savepath)
+                except KeyboardInterrupt:
+                    raise
                 except:
                     i = 2
                     while os.path.exists(savepath):

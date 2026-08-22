@@ -3,20 +3,41 @@
 import os
 import sys
 import re
-from autoprocess import autoProcessTV, autoProcessMovie, autoProcessTVSR, sonarr, radarr
+from autoprocess import autoProcessTV, autoProcessTVSR, sonarr, radarr, whisparr
 from resources.readsettings import ReadSettings
 from resources.mediaprocessor import MediaProcessor
 from resources.log import getLogger
 from deluge_client import DelugeRPCClient
 import shutil
 
+import ssl
+import socket
+import warnings
+
+PY310_OR_LATER = sys.version_info[0] >= 3 and sys.version_info[1] >= 10
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+
+# Fix for python 3.10 SSL issues
+class SMADelugeRPCClient(DelugeRPCClient):
+    def _create_socket(self, ssl_version=None):
+        if ssl_version is not None:
+            self._socket = ssl.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), ssl_version=ssl_version, ciphers="AES256-SHA")
+        else:
+            self._socket = ssl.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), ciphers="AES256-SHA")
+        self._socket.settimeout(self.timeout)
+
+
 log = getLogger("DelugePostProcess")
 
 log.info("Deluge post processing started.")
 
+DRPCClient = SMADelugeRPCClient if PY310_OR_LATER else DelugeRPCClient
+
 try:
     settings = ReadSettings()
-    categories = [settings.deluge['sb'], settings.deluge['cp'], settings.deluge['sonarr'], settings.deluge['radarr'], settings.deluge['sr'], settings.deluge['bypass']]
+    categories = [settings.deluge['sb'], settings.deluge['sonarr'], settings.deluge['radarr'], settings.deluge['whisparr'], settings.deluge['sr'], settings.deluge['bypass']]
     remove = settings.deluge['remove']
 
     if len(sys.argv) < 4:
@@ -33,7 +54,7 @@ try:
     log.debug("Torrent: %s." % torrent_name)
     log.debug("Hash: %s." % torrent_id)
 
-    client = DelugeRPCClient(host=settings.deluge['host'], port=int(settings.deluge['port']), username=settings.deluge['user'], password=settings.deluge['pass'])
+    client = DRPCClient(host=settings.deluge['host'], port=int(settings.deluge['port']), username=settings.deluge['user'], password=settings.deluge['pass'])
     client.connect()
 
     if client.connected:
@@ -89,10 +110,10 @@ try:
 
     try:
         if settings.deluge['convert']:
-            # Check for custom Deluge output_dir
-            if settings.deluge['output_dir']:
-                settings.output_dir = settings.deluge['output_dir']
-                log.debug("Overriding output_dir to %s." % settings.deluge['output_dir'])
+            # Check for custom Deluge output directory
+            if settings.deluge['output-dir']:
+                settings.output_dir = settings.deluge['output-dir']
+                log.debug("Overriding output_dir to %s." % settings.deluge['output-dir'])
 
             # Perform conversion.
             settings.delete = False
@@ -148,37 +169,40 @@ try:
     except:
         log.exception("Error occurred handling file")
 
-    if categories[0].startswith(category):
+    if settings.deluge['sb'].startswith(category):
         log.info("Passing %s directory to Sickbeard." % path)
         autoProcessTV.processEpisode(path, settings, pathMapping=path_mapping)
-    elif categories[1].startswith(category):
-        log.info("Passing %s directory to Couch Potato." % path)
-        autoProcessMovie.process(path, settings, torrent_name, pathMapping=path_mapping)
-    elif categories[2].startswith(category):
+    elif settings.deluge['sonarr'].startswith(category):
         log.info("Passing %s directory to Sonarr." % path)
         sonarr.processEpisode(path, settings, pathMapping=path_mapping)
-    elif categories[3].startswith(category):
+    elif settings.deluge['radarr'].startswith(category):
         log.info("Passing %s directory to Radarr." % path)
         radarr.processMovie(path, settings, pathMapping=path_mapping)
-    elif categories[4].startswith(category):
+    elif settings.deluge['whisparr'].startswith(category):
+        log.info("Passing %s directory to Whisparr." % path)
+        whisparr.processMovie(path, settings, pathMapping=path_mapping)
+    elif settings.deluge['sr'].startswith(category):
         log.info("Passing %s directory to Sickrage." % path)
         autoProcessTVSR.processEpisode(path, settings, pathMapping=path_mapping)
-    elif categories[5].startswith(category):
+    elif settings.deluge['bypass'].startswith(category):
         log.info("Bypassing any further processing as per category.")
-
-    if delete_dir:
-        if os.path.exists(delete_dir):
-            try:
-                os.rmdir(delete_dir)
-                log.debug("Successfully removed tempoary directory %s." % delete_dir)
-            except:
-                log.exception("Unable to delete temporary directory.")
 
     if remove:
         try:
             client.call('core.remove_torrent', torrent_id, True)
         except:
             log.exception("Unable to remove torrent from deluge.")
+
+    if delete_dir:
+        if os.path.exists(delete_dir):
+            if os.listdir(delete_dir):
+                try:
+                    os.rmdir(delete_dir)
+                    log.debug("Successfully removed tempoary directory %s." % delete_dir)
+                except:
+                    log.exception("Unable to delete temporary directory.")
+            else:
+                log.debug("Temporary directory %s is not empty, will not delete." % delete_dir)
 except:
     log.exception("Unexpected exception.")
     sys.exit(1)

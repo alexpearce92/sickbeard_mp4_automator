@@ -4,7 +4,7 @@ import os
 import re
 import sys
 import shutil
-from autoprocess import autoProcessTV, autoProcessMovie, autoProcessTVSR, sonarr, radarr
+from autoprocess import autoProcessTV, autoProcessTVSR, sonarr, radarr, whisparr
 from resources.log import getLogger
 from resources.readsettings import ReadSettings
 from resources.mediaprocessor import MediaProcessor
@@ -19,7 +19,7 @@ log = getLogger("qBittorrentPostProcess")
 
 log.info("qBittorrent post processing started.")
 
-if len(sys.argv) != 7:
+if len(sys.argv) < 6:
     log.error("Not enough command line parameters present, are you launching this from qBittorrent?")
     log.error("#Args: %L %T %R %F %N %I Category, Tracker, RootPath, ContentPath , TorrentName, InfoHash")
     log.error("Length was %s" % str(len(sys.argv)))
@@ -29,14 +29,24 @@ if len(sys.argv) != 7:
 try:
     settings = ReadSettings()
     label = sys.argv[1].lower().strip()
-    root_path = str(sys.argv[3])
-    content_path = str(sys.argv[4])
-    name = sys.argv[5]
-    torrent_hash = sys.argv[6]
-    categories = [settings.qBittorrent['cp'], settings.qBittorrent['sb'], settings.qBittorrent['sonarr'], settings.qBittorrent['radarr'], settings.qBittorrent['sr'], settings.qBittorrent['bypass']]
+    if len(sys.argv) == 6:
+        root_path = str(sys.argv[3])
+        content_path = str(sys.argv[3])
+        name = sys.argv[4]
+        torrent_hash = sys.argv[5]
+    else:
+        root_path = str(sys.argv[3])
+        content_path = str(sys.argv[4])
+        name = sys.argv[5]
+        torrent_hash = sys.argv[6]
+
+    if not root_path:
+        root_path = os.path.dirname(content_path)
+    categories = [settings.qBittorrent['sb'], settings.qBittorrent['sonarr'], settings.qBittorrent['radarr'], settings.qBittorrent['whisparr'], settings.qBittorrent['sr']] + settings.qBittorrent['bypass']
     path_mapping = settings.qBittorrent['path-mapping']
 
     log.debug("Root Path: %s." % root_path)
+    log.debug("Content Path: %s." % content_path)
     log.debug("Label: %s." % label)
     log.debug("Categories: %s." % categories)
     log.debug("Torrent hash: %s." % torrent_hash)
@@ -72,10 +82,10 @@ try:
             qb.pause(torrent_hash)
 
     if settings.qBittorrent['convert']:
-        # Check for custom qBittorrent output_dir
-        if settings.qBittorrent['output_dir']:
-            settings.output_dir = settings.qBittorrent['output_dir']
-            log.debug("Overriding output_dir to %s." % settings.qBittorrent['output_dir'])
+        # Check for custom qBittorrent output directory
+        if settings.qBittorrent['output-dir']:
+            settings.output_dir = settings.qBittorrent['output-dir']
+            log.debug("Overriding output_dir to %s." % settings.qBittorrent['output-dir'])
 
         # Perform conversion.
         log.info("Performing conversion")
@@ -161,22 +171,22 @@ try:
         path = newpath
         delete_dir = newpath
 
-    if categories[0].startswith(label):
-        log.info("Passing %s directory to Couch Potato." % path)
-        autoProcessMovie.process(path, settings, pathMapping=path_mapping)
-    elif categories[1].startswith(label):
+    if settings.qBittorrent['sb'].startswith(label):
         log.info("Passing %s directory to Sickbeard." % path)
         autoProcessTV.processEpisode(path, settings, pathMapping=path_mapping)
-    elif categories[2].startswith(label):
+    elif settings.qBittorrent['sonarr'].startswith(label):
         log.info("Passing %s directory to Sonarr." % path)
         sonarr.processEpisode(path, settings, pathMapping=path_mapping)
-    elif categories[3].startswith(label):
+    elif settings.qBittorrent['radarr'].startswith(label):
         log.info("Passing %s directory to Radarr." % path)
         radarr.processMovie(path, settings, pathMapping=path_mapping)
-    elif categories[4].startswith(label):
+    elif settings.qBittorrent['whisparr'].startswith(label):
+        log.info("Passing %s directory to Whisparr." % path)
+        whisparr.processMovie(path, settings, pathMapping=path_mapping)
+    elif settings.qBittorrent['sr'].startswith(label):
         log.info("Passing %s directory to Sickrage." % path)
         autoProcessTVSR.processEpisode(path, settings, pathMapping=path_mapping)
-    elif categories[5].startswith(label):
+    elif [x for x in settings.qBittorrent['bypass'] if x.startswith(label)]:
         log.info("Bypassing any further processing as per category.")
 
     # Run a qbittorrent action after conversion.
@@ -196,11 +206,14 @@ try:
 
     if delete_dir:
         if os.path.exists(delete_dir):
-            try:
-                os.rmdir(delete_dir)
-                log.debug("Successfully removed tempoary directory %s." % delete_dir)
-            except:
-                log.exception("Unable to delete temporary directory")
+            if os.listdir(delete_dir):
+                try:
+                    os.rmdir(delete_dir)
+                    log.debug("Successfully removed tempoary directory %s." % delete_dir)
+                except:
+                    log.exception("Unable to delete temporary directory")
+            else:
+                log.debug("Temporary directory %s is not empty, will not delete." % delete_dir)
 except:
     log.exception("Unexpected exception.")
     sys.exit(1)

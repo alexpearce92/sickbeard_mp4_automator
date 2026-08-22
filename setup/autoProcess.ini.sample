@@ -3,10 +3,11 @@ ffmpeg = ffmpeg.exe
 ffprobe = ffprobe.exe
 threads = 0
 hwaccels = 
-hwaccel-decoders = h264_cuvid, mjpeg_cuvid, mpeg1_cuvid, mpeg2_cuvid, mpeg4_cuvid, vc1_cuvid, hevc_qsv, h264_qsv, hevc_vaapi, h264_vaapi
-hwdevices = vaapi:/dev/dri/renderD128
-hwaccel-output-format = vaapi:vaapi
+hwaccel-decoders = 
+hwdevices = 
+hwaccel-output-format = 
 output-directory = 
+output-directory-space-ratio = 0.0
 output-format = mp4
 output-extension = mp4
 temp-extension = 
@@ -15,7 +16,6 @@ ignored-extensions = nfo, ds_store
 copy-to = 
 move-to = 
 delete-original = True
-sort-streams = True
 process-same-extensions = False
 bypass-if-copying-all = False
 force-convert = False
@@ -28,7 +28,7 @@ postopts =
 regex-directory-replace = [^\w\-_\. ]
 
 [Permissions]
-chmod = 0644
+chmod = 0664
 uid = -1
 gid = -1
 
@@ -40,6 +40,7 @@ tag-language = eng
 download-artwork = poster
 sanitize-disposition = 
 strip-metadata = False
+keep-titles = False
 
 [Video]
 codec = h264, x264
@@ -54,6 +55,7 @@ max-width = 0
 profile = 
 max-level = 0.0
 pix-fmt = 
+prioritize-source-pix-fmt = True
 filter = 
 force-filter = False
 
@@ -73,28 +75,37 @@ profile =
 codec = ac3
 languages = 
 default-language = 
+include-original-language = True
 first-stream-of-language = False
-allow-language-relax = True
 channel-bitrate = 128
+variable-bitrate = 0
 max-bitrate = 0
 max-channels = 0
-prefer-more-channels = True
-default-more-channels = True
 filter = 
+profile = 
 force-filter = False
 sample-rates = 
+sample-format = 
+atmos-force-copy = False
 copy-original = False
 aac-adtstoasc = False
-ignore-truehd = mp4, m4v
 ignored-dispositions = 
+force-default = False
 unique-dispositions = False
+stream-codec-combinations = 
+
+[Audio.Sorting]
+sorting = language, channels.d, map, d.comment
+default-sorting = channels.d, map, d.comment
+codecs = 
 
 [Universal Audio]
 codec = aac
 channel-bitrate = 128
+variable-bitrate = 0
 first-stream-only = False
-move-after = False
 filter = 
+profile = 
 force-filter = False
 
 [Audio.ChannelFilters]
@@ -105,6 +116,8 @@ codec = mov_text
 codec-image-based = 
 languages = 
 default-language = 
+force-default = True
+include-original-language = False
 first-stream-of-language = False
 encoding = 
 burn-subtitles = False
@@ -117,10 +130,26 @@ ignore-embedded-subs = False
 ignored-dispositions = 
 unique-dispositions = False
 attachment-codec = 
+remove-bitstream-subs = False
+fix-sub-duration = True
+
+[Subtitle.Sorting]
+sorting = language, d.comment, d.default.d, d.forced.d
+burn-sorting = language, d.comment, d.default.d, d.forced.d
+codecs = 
+
+[Subtitle.CleanIt]
+enabled = False
+config-path = 
+tags = 
+
+[Subtitle.FFSubsync]
+enabled = False
 
 [Subtitle.Subliminal]
 download-subs = False
-download-hearing-impaired-subs = False
+download-forced-subs = False
+include-hearing-impaired-subs = False
 providers = 
 
 [Subtitle.Subliminal.Auth]
@@ -135,6 +164,7 @@ ssl = False
 webroot = 
 force-rename = False
 rescan = True
+in-progress-check = True
 block-reprocess = False
 
 [Radarr]
@@ -145,6 +175,18 @@ ssl = False
 webroot = 
 force-rename = False
 rescan = True
+in-progress-check = True
+block-reprocess = False
+
+[Whisparr]
+host = localhost
+port = 6969
+apikey =
+ssl = False
+webroot =
+force-rename = False
+rescan = True
+in-progress-check = True
 block-reprocess = False
 
 [Sickbeard]
@@ -165,23 +207,10 @@ webroot =
 username = 
 password = 
 
-[CouchPotato]
-host = localhost
-port = 5050
-username = 
-password = 
-apikey = 
-delay = 65
-method = renamer
-delete-failed = False
-ssl = False
-webroot = 
-
 [SABNZBD]
 convert = True
 sickbeard-category = sickbeard
 sickrage-category = sickrage
-couchpotato-category = couchpotato
 sonarr-category = sonarr
 radarr-category = radarr
 bypass-category = bypass
@@ -189,7 +218,6 @@ output-directory =
 path-mapping = 
 
 [Deluge]
-couchpotato-label = couchpotato
 sickbeard-label = sickbeard
 sickrage-label = sickrage
 sonarr-label = sonarr
@@ -205,7 +233,6 @@ remove = False
 path-mapping = 
 
 [qBittorrent]
-couchpotato-label = couchpotato
 sickbeard-label = sickbeard
 sickrage-label = sickrage
 sonarr-label = sonarr
@@ -223,7 +250,6 @@ output-directory =
 path-mapping = 
 
 [uTorrent]
-couchpotato-label = couchpotato
 sickbeard-label = sickbeard
 sickrage-label = sickrage
 sonarr-label = sonarr
@@ -242,8 +268,13 @@ output-directory =
 path-mapping = 
 
 [Plex]
+username = 
+password = 
+servername = 
 host = localhost
 port = 32400
 refresh = False
 token = 
-
+ssl = True
+ignore-certs = False
+path-mapping = 
