@@ -2,42 +2,6 @@ diff --git a/resources/mediaprocessor.py b/resources/mediaprocessor.py
 index 78a89e2..9fc3ac0 100644
 --- a/resources/mediaprocessor.py
 +++ b/resources/mediaprocessor.py
-@@ -91,7 +91,10 @@ class MediaProcessor:
-                         output_files.extend(self.replicate(sub))
- 
-                     for file in output_files:
--                        self.setPermissions(file)
-+                        try:
-+                            self.setPermissions(file)
-+                        except:
-+                            self.log.error(f"Failed to reset file permissions for {file}. Continuing...")
- 
-                     if post:
-                         self.post(output_files, mediatype, tmdbid=tmdbid, season=season, episode=episode)
-@@ -1970,7 +1973,10 @@ class MediaProcessor:
-                     paths.extend([(subliminal.subtitle.get_subtitle_path(video.name, x.language), x) for x in saves])
-                 for path, sub in paths:
-                     self.log.info("Downloaded new subtitle %s from source %s." % (path, sub.info))
--                    self.setPermissions(path)
-+                    try:
-+                        self.setPermissions(path)
-+                    except:
-+                        self.log.error(f"Failed to reset file permissions for {path}. Continuing...")
-                 return [p for p, _ in paths]
-             except KeyboardInterrupt:
-                 raise
-@@ -2118,7 +2124,10 @@ class MediaProcessor:
-                 raise
-             except:
-                 self.log.exception("Unable to create external subtitle file for stream %s." % (options['index']))
--            self.setPermissions(outputfile)
-+            try:
-+                self.setPermissions(outputfile)
-+            except:
-+                self.log.error(f"Failed to reset file permissions for {outputfile}. Continuing...")
-         return rips
- 
-     # Get output file name
 @@ -2138,7 +2147,7 @@ class MediaProcessor:
          self.log.debug("File name: %s." % filename)
          self.log.debug("Input extension: %s." % input_extension)
@@ -61,27 +25,3 @@ index 78a89e2..9fc3ac0 100644
                      if progressOutput:
                          progressOutput(timecode, debug)
                      else:
-@@ -2358,7 +2370,10 @@ class MediaProcessor:
-                     self.displayProgressBar(100, newline=True)
- 
-             self.log.info("%s created." % outputfile)
--            self.setPermissions(outputfile)
-+            try:
-+                self.setPermissions(outputfile)
-+            except:
-+                self.log.error(f"Failed to reset file permissions for {outputfile}. Continuing...")
- 
-         except FFMpegConvertError as e:
-             self.log.exception("Error converting file, FFMPEG error.")
-@@ -2451,7 +2466,10 @@ class MediaProcessor:
- 
-             try:
-                 processor.process(inputfile, outputfile)
--                self.setPermissions(outputfile)
-+                try:
-+                    self.setPermissions(outputfile)
-+                except:
-+                    self.log.error(f"Failed to reset file permissions for {outputfile}. Continuing...")
- 
-                 # Cleanup
-                 if self.removeFile(inputfile, replacement=outputfile):
